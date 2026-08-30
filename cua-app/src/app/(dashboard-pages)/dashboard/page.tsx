@@ -25,6 +25,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import Logo from "@/components/custom/Logo";
+import SignOutButton from "@/app/(auth-pages)/signout/page";
 
 type Workspace = {
   id: string;
@@ -49,17 +50,25 @@ type RunnerKey = {
   created_at: string;
 };
 
-type NavSection = "overview" | "runners" | "api-keys" | "activity" | "members" | "settings";
+type NavSection =
+  | "overview"
+  | "runners"
+  | "api-keys"
+  | "activity"
+  | "members"
+  | "settings";
 
 export default function DashboardPage() {
   const router = useRouter();
-  
+
   // Data state
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [runners, setRunners] = useState<Runner[]>([]);
   const [runnerKeys, setRunnerKeys] = useState<RunnerKey[]>([]);
-  const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(null);
-  
+  const [selectedWorkspace, setSelectedWorkspace] = useState<Workspace | null>(
+    null,
+  );
+
   // UI state
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -85,11 +94,11 @@ export default function DashboardPage() {
   // Auto-refresh runners every 10 seconds
   useEffect(() => {
     if (!selectedWorkspace) return;
-    
+
     const interval = setInterval(() => {
       loadWorkspaceData(true);
     }, 10000);
-    
+
     return () => clearInterval(interval);
   }, [selectedWorkspace?.id]);
 
@@ -97,7 +106,7 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       const res = await fetch("/api/dashboard/workspaces");
-      
+
       if (!res.ok) {
         if (res.status === 401) {
           router.push("/signin");
@@ -107,7 +116,7 @@ export default function DashboardPage() {
 
       const data = await res.json();
       setWorkspaces(data.workspaces || []);
-      
+
       if (data.workspaces?.length > 0) {
         setSelectedWorkspace(data.workspaces[0]);
       }
@@ -120,20 +129,20 @@ export default function DashboardPage() {
 
   async function loadWorkspaceData(silent = false) {
     if (!selectedWorkspace) return;
-    
+
     if (!silent) setRefreshing(true);
-    
+
     try {
       const [runnersRes, keysRes] = await Promise.all([
         fetch(`/api/onboarding/runners?workspaceId=${selectedWorkspace.id}`),
-        fetch(`/api/dashboard/runner-keys?workspaceId=${selectedWorkspace.id}`)
+        fetch(`/api/dashboard/runner-keys?workspaceId=${selectedWorkspace.id}`),
       ]);
-      
+
       if (runnersRes.ok) {
         const data = await runnersRes.json();
         setRunners(data.runners || []);
       }
-      
+
       if (keysRes.ok) {
         const data = await keysRes.json();
         setRunnerKeys(data.keys || []);
@@ -197,7 +206,7 @@ export default function DashboardPage() {
                 Workspace
               </p>
 
-              <button 
+              <button
                 onClick={() => setShowWorkspaceSwitcher(!showWorkspaceSwitcher)}
                 className="flex w-full items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.025] px-3 py-2.5 text-left transition hover:bg-white/[0.04]"
               >
@@ -209,33 +218,41 @@ export default function DashboardPage() {
                     {selectedWorkspace?.slug || ""}
                   </p>
                 </div>
-                <FiChevronDown className={`size-3.5 text-white/30 transition ${showWorkspaceSwitcher ? "rotate-180" : ""}`} />
+                <FiChevronDown
+                  className={`size-3.5 text-white/30 transition ${showWorkspaceSwitcher ? "rotate-180" : ""}`}
+                />
               </button>
 
               {/* Workspace Dropdown */}
               {showWorkspaceSwitcher && (
                 <div className="absolute left-0 right-0 top-full mt-2 z-50 rounded-lg border border-white/[0.07] bg-[#0d0d0d] shadow-xl">
-                  {workspaces.map((ws) => (
-                    <button
-                      key={ws.id}
-                      onClick={() => switchWorkspace(ws)}
-                      className={`flex w-full items-center justify-between px-3 py-2.5 text-left transition hover:bg-white/[0.04] first:rounded-t-lg last:rounded-b-lg ${
-                        ws.id === selectedWorkspace?.id ? "bg-white/[0.04]" : ""
-                      }`}
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-xs text-white/70">{ws.name}</p>
-                        <p className="mt-1 font-mono text-[9px] text-white/20">{ws.slug}</p>
-                      </div>
-                      {ws.id === selectedWorkspace?.id && (
-                        <FiCheck className="size-3.5 text-emerald-400" />
-                      )}
-                    </button>
-                  ))}
+                  <div className="max-h-[200px] overflow-y-auto">
+                    {workspaces.map((ws) => (
+                      <button
+                        key={ws.id}
+                        onClick={() => switchWorkspace(ws)}
+                        className={`flex w-full items-center justify-between px-3 py-2.5 text-left transition hover:bg-white/[0.04] first:rounded-t-lg ${
+                          ws.id === selectedWorkspace?.id ? "bg-white/[0.04]" : ""
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-xs text-white/70">
+                            {ws.name}
+                          </p>
+                          <p className="mt-1 font-mono text-[9px] text-white/20">
+                            {ws.slug}
+                          </p>
+                        </div>
+                        {ws.id === selectedWorkspace?.id && (
+                          <FiCheck className="size-3.5 text-emerald-400" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
                   <div className="border-t border-white/[0.06]">
-                    <button 
+                    <button
                       onClick={() => router.push("/onboarding")}
-                      className="flex w-full items-center gap-2 px-3 py-2.5 text-[10px] text-white/30 transition hover:bg-white/[0.04] hover:text-white/60"
+                      className="flex w-full items-center gap-2 rounded-b-lg px-3 py-2.5 text-[10px] text-white/30 transition hover:bg-white/[0.04] hover:text-white/60"
                     >
                       <FiPlus className="size-3" />
                       Create new workspace
@@ -247,29 +264,33 @@ export default function DashboardPage() {
 
             {/* Navigation */}
             <nav className="space-y-1">
-              <NavItem 
-                icon={FiBox} 
-                label="Overview" 
-                active={activeNav === "overview"} 
+              <NavItem
+                icon={FiBox}
+                label="Overview"
+                active={activeNav === "overview"}
                 onClick={() => setActiveNav("overview")}
               />
-              <NavItem 
-                icon={FiMonitor} 
-                label="Runners" 
-                active={activeNav === "runners"} 
+              <NavItem
+                icon={FiMonitor}
+                label="Runners"
+                active={activeNav === "runners"}
                 onClick={() => setActiveNav("runners")}
-                badge={stats.onlineRunners > 0 ? stats.onlineRunners.toString() : undefined}
+                badge={
+                  stats.onlineRunners > 0
+                    ? stats.onlineRunners.toString()
+                    : undefined
+                }
               />
-              <NavItem 
-                icon={FiKey} 
-                label="API Keys" 
-                active={activeNav === "api-keys"} 
+              <NavItem
+                icon={FiKey}
+                label="API Keys"
+                active={activeNav === "api-keys"}
                 onClick={() => setActiveNav("api-keys")}
               />
-              <NavItem 
-                icon={FiActivity} 
-                label="Activity" 
-                active={activeNav === "activity"} 
+              <NavItem
+                icon={FiActivity}
+                label="Activity"
+                active={activeNav === "activity"}
                 onClick={() => setActiveNav("activity")}
               />
             </nav>
@@ -279,29 +300,32 @@ export default function DashboardPage() {
                 Workspace
               </p>
               <nav className="space-y-1">
-                <NavItem 
-                  icon={FiUsers} 
-                  label="Members" 
-                  active={activeNav === "members"} 
+                <NavItem
+                  icon={FiUsers}
+                  label="Members"
+                  active={activeNav === "members"}
                   onClick={() => setActiveNav("members")}
                 />
-                <NavItem 
-                  icon={FiSettings} 
-                  label="Settings" 
-                  active={activeNav === "settings"} 
+                <NavItem
+                  icon={FiSettings}
+                  label="Settings"
+                  active={activeNav === "settings"}
                   onClick={() => setActiveNav("settings")}
                 />
               </nav>
             </div>
 
             {/* Refresh button */}
-            <div className="mt-auto pt-6">
+            <div className="mt-auto pt-6 gap-2 flex flex-col">
+              <SignOutButton className="w-full" />
               <button
                 onClick={() => loadWorkspaceData()}
                 disabled={refreshing}
                 className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/[0.07] py-2.5 text-[10px] text-white/30 transition hover:bg-white/[0.04] hover:text-white/60 disabled:opacity-50"
               >
-                <FiRefreshCw className={`size-3 ${refreshing ? "animate-spin" : ""}`} />
+                <FiRefreshCw
+                  className={`size-3 ${refreshing ? "animate-spin" : ""}`}
+                />
                 {refreshing ? "Refreshing..." : "Refresh data"}
               </button>
             </div>
@@ -314,7 +338,9 @@ export default function DashboardPage() {
           <header className="flex h-20 items-center justify-between border-b border-white/[0.06] px-6 lg:px-10">
             <div>
               <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/20">
-                {activeNav === "overview" ? "Workspace overview" : activeNav.replace("-", " ")}
+                {activeNav === "overview"
+                  ? "Workspace overview"
+                  : activeNav.replace("-", " ")}
               </p>
               <h1 className="mt-1 text-sm font-medium text-white/80">
                 {selectedWorkspace?.name || "Dashboard"}
@@ -324,7 +350,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-3">
               <Button
                 variant="outline"
-                onClick={() => window.open("https://docs.cua.so", "_blank")}
+                onClick={() => window.open("/docs", "_blank")}
                 className="hidden h-9 border-white/[0.08] bg-white/[0.02] px-3 text-[10px] text-white/40 hover:bg-white/[0.05] hover:text-white sm:flex"
               >
                 <FiTerminal className="mr-2 size-3" />
@@ -332,7 +358,16 @@ export default function DashboardPage() {
                 <FiArrowUpRight className="ml-2 size-3" />
               </Button>
 
-              <Button 
+              <Button
+                variant="outline"
+                onClick={() => router.push("/automation/editor")}
+                className="h-9 border-white/[0.08] bg-white/[0.02] px-3 text-[10px] text-white/40 hover:bg-white/[0.05] hover:text-white"
+              >
+                <FiZap className="mr-2 size-3" />
+                Automation
+              </Button>
+
+              <Button
                 onClick={() => setShowAddRunnerModal(true)}
                 className="h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90"
               >
@@ -378,13 +413,9 @@ export default function DashboardPage() {
               />
             )}
 
-            {activeNav === "activity" && (
-              <ActivitySection />
-            )}
+            {activeNav === "activity" && <ActivitySection />}
 
-            {activeNav === "members" && (
-              <MembersSection />
-            )}
+            {activeNav === "members" && <MembersSection />}
 
             {activeNav === "settings" && (
               <SettingsSection workspace={selectedWorkspace} />
@@ -404,8 +435,8 @@ export default function DashboardPage() {
 
       {/* Click outside handlers */}
       {(showWorkspaceSwitcher || showRunnerMenu) && (
-        <div 
-          className="fixed inset-0 z-40" 
+        <div
+          className="fixed inset-0 z-40"
           onClick={() => {
             setShowWorkspaceSwitcher(false);
             setShowRunnerMenu(null);
@@ -435,7 +466,12 @@ function OverviewSection({
   selectedWorkspace: Workspace | null;
   runners: Runner[];
   runnerKeys: RunnerKey[];
-  stats: { totalRunners: number; onlineRunners: number; busyRunners: number; apiKeys: number };
+  stats: {
+    totalRunners: number;
+    onlineRunners: number;
+    busyRunners: number;
+    apiKeys: number;
+  };
   copiedKeyId: string | null;
   copiedWorkspaceId: boolean;
   showRunnerMenu: string | null;
@@ -452,7 +488,9 @@ function OverviewSection({
         <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
           <div>
             <div className="flex items-center gap-2">
-              <span className={`size-1.5 rounded-full ${stats.onlineRunners > 0 ? "bg-emerald-400" : "bg-yellow-400"}`} />
+              <span
+                className={`size-1.5 rounded-full ${stats.onlineRunners > 0 ? "bg-emerald-400" : "bg-yellow-400"}`}
+              />
               <span className="font-mono text-[9px] uppercase tracking-[0.18em] text-white/25">
                 {stats.onlineRunners > 0 ? "Operational" : "No runners online"}
               </span>
@@ -463,7 +501,8 @@ function OverviewSection({
             </h2>
 
             <p className="mt-3 max-w-xl text-sm leading-6 text-white/30">
-              Manage runners, credentials, and execution infrastructure for your workspace.
+              Manage runners, credentials, and execution infrastructure for your
+              workspace.
             </p>
           </div>
 
@@ -472,11 +511,17 @@ function OverviewSection({
             <code className="rounded bg-white/[0.04] px-2 py-1 font-mono text-white/35">
               {selectedWorkspace?.id?.slice(0, 8) || "—"}...
             </code>
-            <button 
-              onClick={() => selectedWorkspace && copyToClipboard(selectedWorkspace.id)}
+            <button
+              onClick={() =>
+                selectedWorkspace && copyToClipboard(selectedWorkspace.id)
+              }
               className="hover:text-white transition"
             >
-              {copiedWorkspaceId ? <FiCheck className="size-3 text-emerald-400" /> : <FiCopy className="size-3" />}
+              {copiedWorkspaceId ? (
+                <FiCheck className="size-3 text-emerald-400" />
+              ) : (
+                <FiCopy className="size-3" />
+              )}
             </button>
           </div>
         </div>
@@ -484,10 +529,27 @@ function OverviewSection({
 
       {/* Stats */}
       <section className="grid gap-px overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.07] sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Total runners" value={stats.totalRunners.toString()} icon={FiMonitor} />
-        <StatCard label="Online now" value={stats.onlineRunners.toString()} icon={FiActivity} accent={stats.onlineRunners > 0} />
-        <StatCard label="Busy" value={stats.busyRunners.toString()} icon={FiZap} />
-        <StatCard label="API keys" value={stats.apiKeys.toString()} icon={FiKey} />
+        <StatCard
+          label="Total runners"
+          value={stats.totalRunners.toString()}
+          icon={FiMonitor}
+        />
+        <StatCard
+          label="Online now"
+          value={stats.onlineRunners.toString()}
+          icon={FiActivity}
+          accent={stats.onlineRunners > 0}
+        />
+        <StatCard
+          label="Busy"
+          value={stats.busyRunners.toString()}
+          icon={FiZap}
+        />
+        <StatCard
+          label="API keys"
+          value={stats.apiKeys.toString()}
+          icon={FiKey}
+        />
       </section>
 
       {/* Main Grid */}
@@ -500,9 +562,14 @@ function OverviewSection({
                 <FiMonitor className="size-3.5 text-white/30" />
                 <h3 className="text-xs font-medium text-white/60">Runners</h3>
               </div>
-              <p className="mt-1 text-[10px] text-white/20">Machines connected to this workspace</p>
+              <p className="mt-1 text-[10px] text-white/20">
+                Machines connected to this workspace
+              </p>
             </div>
-            <button onClick={onViewAllRunners} className="text-[10px] text-white/30 transition hover:text-white">
+            <button
+              onClick={onViewAllRunners}
+              className="text-[10px] text-white/30 transition hover:text-white"
+            >
               View all →
             </button>
           </div>
@@ -511,11 +578,15 @@ function OverviewSection({
             {runners.length > 0 ? (
               <div className="divide-y divide-white/[0.06]">
                 {runners.slice(0, 3).map((runner) => (
-                  <RunnerRow 
-                    key={runner.id} 
-                    runner={runner} 
+                  <RunnerRow
+                    key={runner.id}
+                    runner={runner}
                     showMenu={showRunnerMenu === runner.id}
-                    onToggleMenu={() => setShowRunnerMenu(showRunnerMenu === runner.id ? null : runner.id)}
+                    onToggleMenu={() =>
+                      setShowRunnerMenu(
+                        showRunnerMenu === runner.id ? null : runner.id,
+                      )
+                    }
                   />
                 ))}
               </div>
@@ -525,7 +596,7 @@ function OverviewSection({
               </div>
             )}
 
-            <button 
+            <button
               onClick={onAddRunner}
               className="flex w-full items-center justify-center gap-2 border-t border-white/[0.06] py-3 text-[10px] text-white/25 transition hover:bg-white/[0.025] hover:text-white/50"
             >
@@ -540,17 +611,21 @@ function OverviewSection({
           <div className="mb-4 flex items-center gap-2">
             <FiKey className="size-3.5 text-white/30" />
             <div>
-              <h3 className="text-xs font-medium text-white/60">Runner connection</h3>
-              <p className="mt-1 text-[10px] text-white/20">Authentication credentials</p>
+              <h3 className="text-xs font-medium text-white/60">
+                Runner connection
+              </h3>
+              <p className="mt-1 text-[10px] text-white/20">
+                Authentication credentials
+              </p>
             </div>
           </div>
 
           {runnerKeys.length > 0 ? (
             <div className="rounded-xl border border-white/[0.07] bg-[#0b0b0b]">
               {runnerKeys.slice(0, 2).map((key) => (
-                <RunnerKeyCard 
-                  key={key.id} 
-                  runnerKey={key} 
+                <RunnerKeyCard
+                  key={key.id}
+                  runnerKey={key}
                   copied={copiedKeyId === key.id}
                   onCopy={() => copyToClipboard(key.key_prefix, key.id)}
                 />
@@ -572,11 +647,18 @@ function OverviewSection({
             <div>
               <div className="flex items-center gap-2">
                 <FiActivity className="size-3.5 text-white/30" />
-                <h3 className="text-xs font-medium text-white/60">Recent activity</h3>
+                <h3 className="text-xs font-medium text-white/60">
+                  Recent activity
+                </h3>
               </div>
-              <p className="mt-1 text-[10px] text-white/20">Latest workspace events</p>
+              <p className="mt-1 text-[10px] text-white/20">
+                Latest workspace events
+              </p>
             </div>
-            <button onClick={onViewActivity} className="text-[10px] text-white/30 hover:text-white">
+            <button
+              onClick={onViewActivity}
+              className="text-[10px] text-white/30 hover:text-white"
+            >
               View activity →
             </button>
           </div>
@@ -592,16 +674,26 @@ function OverviewSection({
             <FiBox className="size-3.5 text-white/30" />
             <div>
               <h3 className="text-xs font-medium text-white/60">Workspace</h3>
-              <p className="mt-1 text-[10px] text-white/20">Configuration details</p>
+              <p className="mt-1 text-[10px] text-white/20">
+                Configuration details
+              </p>
             </div>
           </div>
 
           <div className="rounded-xl border border-white/[0.07] bg-[#0b0b0b]">
-            <InfoRow label="Workspace ID" value={selectedWorkspace?.id || "—"} truncate />
+            <InfoRow
+              label="Workspace ID"
+              value={selectedWorkspace?.id || "—"}
+              truncate
+            />
             <InfoRow label="Slug" value={selectedWorkspace?.slug || "—"} />
-            <InfoRow 
-              label="Created" 
-              value={selectedWorkspace ? new Date(selectedWorkspace.created_at).toLocaleDateString() : "—"} 
+            <InfoRow
+              label="Created"
+              value={
+                selectedWorkspace
+                  ? new Date(selectedWorkspace.created_at).toLocaleDateString()
+                  : "—"
+              }
             />
           </div>
         </section>
@@ -625,10 +717,17 @@ function RunnersSection({
     <>
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">Runners</h2>
-          <p className="mt-2 text-sm text-white/30">All runners connected to this workspace</p>
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
+            Runners
+          </h2>
+          <p className="mt-2 text-sm text-white/30">
+            All runners connected to this workspace
+          </p>
         </div>
-        <Button onClick={onAddRunner} className="h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90">
+        <Button
+          onClick={onAddRunner}
+          className="h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90"
+        >
           <FiPlus className="mr-2 size-3.5" />
           Add runner
         </Button>
@@ -638,11 +737,15 @@ function RunnersSection({
         {runners.length > 0 ? (
           <div className="divide-y divide-white/[0.06]">
             {runners.map((runner) => (
-              <RunnerRow 
-                key={runner.id} 
-                runner={runner} 
+              <RunnerRow
+                key={runner.id}
+                runner={runner}
                 showMenu={showRunnerMenu === runner.id}
-                onToggleMenu={() => setShowRunnerMenu(showRunnerMenu === runner.id ? null : runner.id)}
+                onToggleMenu={() =>
+                  setShowRunnerMenu(
+                    showRunnerMenu === runner.id ? null : runner.id,
+                  )
+                }
                 expanded
               />
             ))}
@@ -650,8 +753,13 @@ function RunnersSection({
         ) : (
           <div className="px-5 py-12 text-center">
             <FiMonitor className="mx-auto size-8 text-white/10" />
-            <p className="mt-4 text-sm text-white/30">No runners connected yet</p>
-            <Button onClick={onAddRunner} className="mt-4 h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90">
+            <p className="mt-4 text-sm text-white/30">
+              No runners connected yet
+            </p>
+            <Button
+              onClick={onAddRunner}
+              className="mt-4 h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90"
+            >
               <FiPlus className="mr-2 size-3.5" />
               Connect your first runner
             </Button>
@@ -675,8 +783,12 @@ function ApiKeysSection({
     <>
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">API Keys</h2>
-          <p className="mt-2 text-sm text-white/30">Authentication credentials for runners</p>
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
+            API Keys
+          </h2>
+          <p className="mt-2 text-sm text-white/30">
+            Authentication credentials for runners
+          </p>
         </div>
         <Button className="h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90">
           <FiPlus className="mr-2 size-3.5" />
@@ -687,9 +799,9 @@ function ApiKeysSection({
       {runnerKeys.length > 0 ? (
         <div className="grid gap-4 md:grid-cols-2">
           {runnerKeys.map((key) => (
-            <RunnerKeyCard 
-              key={key.id} 
-              runnerKey={key} 
+            <RunnerKeyCard
+              key={key.id}
+              runnerKey={key}
               copied={copiedKeyId === key.id}
               onCopy={() => copyToClipboard(key.key_prefix, key.id)}
               expanded
@@ -710,14 +822,22 @@ function ActivitySection() {
   return (
     <>
       <div className="mb-8">
-        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">Activity</h2>
-        <p className="mt-2 text-sm text-white/30">Recent workspace events and logs</p>
+        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
+          Activity
+        </h2>
+        <p className="mt-2 text-sm text-white/30">
+          Recent workspace events and logs
+        </p>
       </div>
 
       <div className="rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-5 py-12 text-center">
         <FiActivity className="mx-auto size-8 text-white/10" />
-        <p className="mt-4 text-sm text-white/30">Activity tracking coming soon</p>
-        <p className="mt-2 text-xs text-white/20">View command executions, runner connections, and more</p>
+        <p className="mt-4 text-sm text-white/30">
+          Activity tracking coming soon
+        </p>
+        <p className="mt-2 text-xs text-white/20">
+          View command executions, runner connections, and more
+        </p>
       </div>
     </>
   );
@@ -728,7 +848,9 @@ function MembersSection() {
     <>
       <div className="mb-8 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">Members</h2>
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
+            Members
+          </h2>
           <p className="mt-2 text-sm text-white/30">Manage workspace access</p>
         </div>
         <Button className="h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90">
@@ -739,7 +861,9 @@ function MembersSection() {
 
       <div className="rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-5 py-12 text-center">
         <FiUsers className="mx-auto size-8 text-white/10" />
-        <p className="mt-4 text-sm text-white/30">Team management coming soon</p>
+        <p className="mt-4 text-sm text-white/30">
+          Team management coming soon
+        </p>
       </div>
     </>
   );
@@ -749,8 +873,12 @@ function SettingsSection({ workspace }: { workspace: Workspace | null }) {
   return (
     <>
       <div className="mb-8">
-        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">Settings</h2>
-        <p className="mt-2 text-sm text-white/30">Configure workspace settings</p>
+        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
+          Settings
+        </h2>
+        <p className="mt-2 text-sm text-white/30">
+          Configure workspace settings
+        </p>
       </div>
 
       <div className="space-y-6">
@@ -758,18 +886,20 @@ function SettingsSection({ workspace }: { workspace: Workspace | null }) {
           <h3 className="text-sm font-medium text-white/70">General</h3>
           <div className="mt-4 space-y-4">
             <div>
-              <label className="text-[10px] text-white/30">Workspace Name</label>
-              <input 
-                type="text" 
-                defaultValue={workspace?.name || ""} 
+              <label className="text-[10px] text-white/30">
+                Workspace Name
+              </label>
+              <input
+                type="text"
+                defaultValue={workspace?.name || ""}
                 className="mt-1 w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-sm text-white/70 outline-none focus:border-white/20"
               />
             </div>
             <div>
               <label className="text-[10px] text-white/30">Slug</label>
-              <input 
-                type="text" 
-                defaultValue={workspace?.slug || ""} 
+              <input
+                type="text"
+                defaultValue={workspace?.slug || ""}
                 disabled
                 className="mt-1 w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-sm text-white/30 outline-none"
               />
@@ -786,7 +916,10 @@ function SettingsSection({ workspace }: { workspace: Workspace | null }) {
           <h3 className="text-sm font-medium text-red-400/70">Danger Zone</h3>
           <p className="mt-2 text-[10px] text-white/30">Irreversible actions</p>
           <div className="mt-4">
-            <Button variant="outline" className="h-9 border-red-400/20 px-4 text-[10px] text-red-400/70 hover:bg-red-400/10">
+            <Button
+              variant="outline"
+              className="h-9 border-red-400/20 px-4 text-[10px] text-red-400/70 hover:bg-red-400/10"
+            >
               <FiTrash2 className="mr-2 size-3" />
               Delete workspace
             </Button>
@@ -848,11 +981,15 @@ function StatCard({
   return (
     <div className="bg-[#0b0b0b] p-5">
       <div className="flex items-center justify-between">
-        <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/20">{label}</span>
+        <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-white/20">
+          {label}
+        </span>
         <Icon className="size-3.5 text-white/20" />
       </div>
       <div className="mt-6 flex items-end gap-3">
-        <span className="text-2xl font-medium tracking-[-0.04em] text-white/80">{value}</span>
+        <span className="text-2xl font-medium tracking-[-0.04em] text-white/80">
+          {value}
+        </span>
         {accent && (
           <span className="mb-1 flex items-center gap-1 text-[9px] text-emerald-400/60">
             <span className="size-1 rounded-full bg-emerald-400" />
@@ -864,13 +1001,13 @@ function StatCard({
   );
 }
 
-function RunnerRow({ 
-  runner, 
-  showMenu, 
+function RunnerRow({
+  runner,
+  showMenu,
   onToggleMenu,
-  expanded = false 
-}: { 
-  runner: Runner; 
+  expanded = false,
+}: {
+  runner: Runner;
   showMenu: boolean;
   onToggleMenu: () => void;
   expanded?: boolean;
@@ -881,7 +1018,11 @@ function RunnerRow({
         <FiCpu className="size-3.5 text-white/30" />
         <span
           className={`absolute -right-0.5 -top-0.5 size-2 rounded-full border-2 border-[#0b0b0b] ${
-            runner.status === "online" ? "bg-emerald-400" : runner.status === "busy" ? "bg-yellow-400" : "bg-white/20"
+            runner.status === "online"
+              ? "bg-emerald-400"
+              : runner.status === "busy"
+                ? "bg-yellow-400"
+                : "bg-white/20"
           }`}
         />
       </div>
@@ -890,11 +1031,15 @@ function RunnerRow({
         <div className="flex items-center gap-2">
           <p className="truncate text-[11px] text-white/55">{runner.name}</p>
           {runner.labels && runner.labels.length > 0 && (
-            <span className="font-mono text-[8px] uppercase text-white/15">{runner.labels[0]}</span>
+            <span className="font-mono text-[8px] uppercase text-white/15">
+              {runner.labels[0]}
+            </span>
           )}
         </div>
         <p className="mt-1 text-[9px] text-white/20">
-          {runner.last_seen_at ? new Date(runner.last_seen_at).toLocaleString() : "Never"}
+          {runner.last_seen_at
+            ? new Date(runner.last_seen_at).toLocaleString()
+            : "Never"}
         </p>
         {expanded && (
           <p className="mt-1 font-mono text-[8px] text-white/15">{runner.id}</p>
@@ -914,7 +1059,7 @@ function RunnerRow({
           {runner.status}
         </span>
 
-        <button 
+        <button
           onClick={onToggleMenu}
           className="relative opacity-0 transition group-hover:opacity-100"
         >
@@ -944,13 +1089,13 @@ function RunnerRow({
   );
 }
 
-function RunnerKeyCard({ 
-  runnerKey, 
-  copied, 
+function RunnerKeyCard({
+  runnerKey,
+  copied,
   onCopy,
-  expanded = false 
-}: { 
-  runnerKey: RunnerKey; 
+  expanded = false,
+}: {
+  runnerKey: RunnerKey;
   copied: boolean;
   onCopy: () => void;
   expanded?: boolean;
@@ -978,7 +1123,11 @@ function RunnerKeyCard({
           className="flex shrink-0 items-center gap-2 rounded-md bg-white/[0.06] px-3 py-2 text-[10px] text-white/40 transition hover:bg-white/[0.09] hover:text-white"
         >
           {copied ? "Copied" : "Copy prefix"}
-          {copied ? <FiCheck className="size-3 text-emerald-400" /> : <FiCopy className="size-3" />}
+          {copied ? (
+            <FiCheck className="size-3 text-emerald-400" />
+          ) : (
+            <FiCopy className="size-3" />
+          )}
         </button>
       </div>
 
@@ -1002,29 +1151,39 @@ function RunnerKeyCard({
   );
 }
 
-function InfoRow({ label, value, truncate = false }: { label: string; value: string; truncate?: boolean }) {
+function InfoRow({
+  label,
+  value,
+  truncate = false,
+}: {
+  label: string;
+  value: string;
+  truncate?: boolean;
+}) {
   return (
     <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4 last:border-0">
       <span className="text-[10px] text-white/25">{label}</span>
-      <code className={`font-mono text-[9px] text-white/35 ${truncate ? "max-w-[150px] truncate" : ""}`}>
+      <code
+        className={`font-mono text-[9px] text-white/35 ${truncate ? "max-w-[150px] truncate" : ""}`}
+      >
         {value}
       </code>
     </div>
   );
 }
 
-function AddRunnerModal({ 
-  workspace, 
+function AddRunnerModal({
+  workspace,
   runnerKeys,
-  onClose 
-}: { 
-  workspace: Workspace; 
+  onClose,
+}: {
+  workspace: Workspace;
   runnerKeys: RunnerKey[];
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const apiKey = runnerKeys[0]?.key_prefix || "YOUR_API_KEY";
-  
+
   const command = `npx cua-runner --service-url ${process.env.NEXT_PUBLIC_SERVICE_URL || "wss://your-service.com"} --api-key ${apiKey}`;
 
   async function copyCommand() {
@@ -1036,7 +1195,7 @@ function AddRunnerModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
       <div className="relative w-full max-w-lg mx-4 rounded-xl border border-white/[0.07] bg-[#0a0a0a] p-6 shadow-2xl">
-        <button 
+        <button
           onClick={onClose}
           className="absolute right-4 top-4 text-white/30 hover:text-white"
         >
@@ -1050,7 +1209,7 @@ function AddRunnerModal({
         <h2 className="mt-6 text-xl font-semibold tracking-[-0.03em] text-white">
           Connect a runner
         </h2>
-        
+
         <p className="mt-2 text-sm text-white/30">
           Run this command on the machine you want to connect:
         </p>
@@ -1062,14 +1221,18 @@ function AddRunnerModal({
         </div>
 
         <div className="mt-4 flex gap-3">
-          <Button 
+          <Button
             onClick={copyCommand}
             className="flex-1 h-10 bg-white text-xs text-black hover:bg-white/90"
           >
-            {copied ? <FiCheck className="mr-2 size-3.5" /> : <FiCopy className="mr-2 size-3.5" />}
+            {copied ? (
+              <FiCheck className="mr-2 size-3.5" />
+            ) : (
+              <FiCopy className="mr-2 size-3.5" />
+            )}
             {copied ? "Copied!" : "Copy command"}
           </Button>
-          <Button 
+          <Button
             variant="outline"
             onClick={onClose}
             className="h-10 border-white/[0.08] px-4 text-xs text-white/50 hover:bg-white/[0.05] hover:text-white"
@@ -1079,7 +1242,8 @@ function AddRunnerModal({
         </div>
 
         <p className="mt-4 text-[10px] text-white/20">
-          Make sure you have Node.js installed. The runner will automatically connect to your workspace.
+          Make sure you have Node.js installed. The runner will automatically
+          connect to your workspace.
         </p>
       </div>
     </div>

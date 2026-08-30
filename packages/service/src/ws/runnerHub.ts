@@ -230,6 +230,30 @@ export class RunnerHub {
 
   // ── Public API (called by HTTP route handlers) ────────────────────────────
 
+  getRunner(runnerId: string): WebSocket | undefined {
+    const ws = this.connections.get(runnerId);
+    if (ws && ws.readyState === WebSocket.OPEN) return ws;
+    return undefined;
+  }
+
+  /** Send an action to a runner and wait for the result (used by workflow execution) */
+  sendAction(runnerId: string, action: unknown): Promise<unknown> {
+    const ws = this.connections.get(runnerId);
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      return Promise.reject(new Error('Runner is not connected'));
+    }
+    const actionId = randomUUID();
+    return new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pendingActions.delete(actionId);
+        reject(new Error(`Action timed out after ${ACTION_TIMEOUT_MS / 1000}s`));
+      }, ACTION_TIMEOUT_MS);
+
+      this.pendingActions.set(actionId, { resolve, reject, timer });
+      this.send(ws, { type: 'action', actionId, payload: action });
+    });
+  }
+
   requestSession(runnerId: string, sessionId: string, userId: string, userEmail: string): boolean {
     return this.sendToRunner(runnerId, { type: 'session_request', sessionId, userId, userEmail });
   }

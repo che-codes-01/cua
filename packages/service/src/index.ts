@@ -7,6 +7,7 @@ import { RunnerHub }       from './ws/runnerHub';
 import { adminKeyGuard }   from './middleware/adminKeyGuard';
 import { adminRouter }     from './routes/admin';
 import { authRouter }      from './routes/auth';
+import { executeRouter }   from './routes/execute';
 import { runnersRouter }   from './routes/runners';
 import { sessionsRouter }  from './routes/sessions';
 import { seedDemoData }    from './seed';
@@ -29,6 +30,7 @@ async function main() {
   // Authenticated users: browse runners and manage sessions
   app.use('/api/runners',  runnersRouter(hub));
   app.use('/api/sessions', sessionsRouter(hub));
+  app.use('/api/execute',  executeRouter(hub));
 
   // Health / readiness probe
   app.get('/health', (_req, res) =>

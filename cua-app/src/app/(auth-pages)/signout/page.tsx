@@ -24,7 +24,7 @@ function SignOutButton({
 
   return (
     <Button onClick={handleSignOut} className={className} variant={variant}>
-      {buttonText}
+      {buttonText} &rarr;
     </Button>
   );
 }

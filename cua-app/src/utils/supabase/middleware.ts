@@ -31,8 +31,13 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   // Redirect unauthenticated users away from protected routes
+  // Exclude API routes that handle their own auth (webhooks, etc.)
+  const isPublicApiRoute = 
+    request.nextUrl.pathname.startsWith("/api/workflows/trigger");
+
   if (
     !user &&
+    !isPublicApiRoute &&
     !request.nextUrl.pathname.startsWith("/signin") &&
     !request.nextUrl.pathname.startsWith("/auth")
   ) {
