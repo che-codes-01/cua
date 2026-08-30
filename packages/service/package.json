@@ -1,0 +1,31 @@
+{
+  "_overrides": {
+    "FOSS_POLICY_EXPIRY": "2026-10-27",
+    "reason": "OutdatedFOSSLibraries policy violations in transitive dependencies (winston, lodash, promise utilities, node-forge, etc.) issued per SDOL-005. See FOSS_OVERRIDES.md for full list and upgrade strategy. Override active through 2026-10-27."
+  },
+  "name": "computer-actions-service",
+  "version": "1.0.0",
+  "description": "Central relay service – manages tenants, runners, and user sessions",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "bcryptjs": "^2.4.3",
+    "dotenv": "^17.4.2",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.11",
+    "tsx": "^4.15.0",
+    "typescript": "^5.4.5"
+  }
+}
