@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { FiArrowRight, FiCheck } from "react-icons/fi";
 
@@ -16,23 +16,45 @@ type Workspace = {
 
 export default function CompleteOnboardingPage() {
   const router = useRouter();
-
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const hasChecked = useRef(false);
 
   useEffect(() => {
+    // Prevent double-run in React Strict Mode
+    if (hasChecked.current) return;
+    hasChecked.current = true;
+
     const storedWorkspace = sessionStorage.getItem("onboarding_workspace");
+    
+    // DEBUG: Log what's in sessionStorage
+    console.log("[complete] sessionStorage.onboarding_workspace:", storedWorkspace);
+    console.log("[complete] All sessionStorage keys:", Object.keys(sessionStorage));
 
     if (!storedWorkspace) {
+      console.log("[complete] No workspace found, redirecting to /onboarding");
       router.replace("/onboarding");
       return;
     }
 
+    console.log("[complete] Workspace found, setting state");
     setWorkspace(JSON.parse(storedWorkspace));
+    setIsReady(true);
+  }, [router]);
 
-    // Clear session storage after onboarding complete
+  function goToDashboard() {
     sessionStorage.removeItem("onboarding_workspace");
     sessionStorage.removeItem("onboarding_runner_connection");
-  }, [router]);
+    router.push("/dashboard");
+  }
+
+  if (!isReady) {
+    return (
+      <main className="min-h-screen bg-[#080808] text-white flex items-center justify-center">
+        <div className="text-white/30">Loading...</div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#080808] text-white">
@@ -78,7 +100,7 @@ export default function CompleteOnboardingPage() {
 
         <div className="mt-12 flex justify-end">
           <Button
-            onClick={() => router.push("/dashboard")}
+            onClick={goToDashboard}
             className="h-10 bg-white px-5 text-xs text-black hover:bg-white/90"
           >
             Go to dashboard

@@ -24,9 +24,9 @@ export default async function DashboardLayout({
   return (
     <AuthenticatedUserProvider user={user}>
       <main className="max-w-10xl w-full">
-        <Header />
+        {/* <Header /> */}
         {children}
-        <Footer />
+        {/* <Footer /> */}
       </main>
     </AuthenticatedUserProvider>
   );
