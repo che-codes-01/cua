@@ -1,12 +1,8 @@
 // ─── In-memory data store (swap for a real DB in production) ─────────────────
 import { randomUUID } from 'crypto';
 import bcrypt from 'bcryptjs';
-import { createClient } from '@supabase/supabase-js';
-
-const supabase = createClient(
-  process.env.SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_KEY || ''
-);
+import { supabase } from './supabase';
+import { log }      from './logger';
 
 // ── Domain Types ───────────────────────────────────────────────────────────────
 
@@ -62,12 +58,12 @@ class Store {
 
   // ── Tenants ─────────────────────────────────────────────────────────────────
 
-  createTenant(name: string, slug: string): Tenant {
+  createTenant(name: string, slug: string, apiKey?: string): Tenant {
     const tenant: Tenant = {
       id:        randomUUID(),
       name,
       slug:      slug.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-      apiKey:    randomUUID().replace(/-/g, ''),       // 32-char hex key
+      apiKey:    apiKey ?? randomUUID().replace(/-/g, ''),
       createdAt: new Date().toISOString(),
     };
     this.tenants.set(tenant.id, tenant);
@@ -103,26 +99,27 @@ class Store {
   // ── Runners ──────────────────────────────────────────────────────────────────
 
   /** Creates or refreshes a runner record when it (re-)connects. */
-  async upsertRunner(id: string, tenantId: string, name: string, labels: string[], version: string): Promise<Runner> {
+  async upsertRunner(id: string, tenantId: string, runnerKeyId: string, name: string, labels: string[]): Promise<Runner> {
     const existing = this.runners.get(id);
     const runner: Runner = {
-      id, tenantId, name, labels, version,
+      id, tenantId, name, labels,
+      version:      '',
       status:       'online',
       lastSeen:     new Date().toISOString(),
       registeredAt: existing?.registeredAt ?? new Date().toISOString(),
     };
     this.runners.set(id, runner);
 
-    await supabase.from('runners').upsert({
-      id: runner.id,
-      workspace_id: tenantId,
-      name: runner.name,
-      status: 'online',
-      labels: runner.labels,
-      version: runner.version,
-      last_seen: runner.lastSeen,
-      registered_at: runner.registeredAt,
-    });
+    const { error } = await supabase?.from('runners').upsert({
+      id:             runner.id,
+      workspace_id:   tenantId,
+      runner_key_id:  runnerKeyId,
+      name:           runner.name,
+      status:         'online',
+      labels:         runner.labels,
+      last_seen_at:   runner.lastSeen,
+    }) ?? {};
+    if (error) log.error('upsertRunner Supabase error:', error.message);
 
     return runner;
   }
@@ -133,10 +130,11 @@ class Store {
       r.status = status;
       r.lastSeen = new Date().toISOString();
 
-      await supabase.from('runners').update({
+      const { error } = await supabase?.from('runners').update({
         status,
-        last_seen: r.lastSeen,
-      }).eq('id', id);
+        last_seen_at: r.lastSeen,
+      }).eq('id', id) ?? {};
+      if (error) log.error('setRunnerStatus Supabase error:', error.message);
     }
   }
 
@@ -145,9 +143,10 @@ class Store {
     const r = this.runners.get(id);
     if (r) {
       r.lastSeen = new Date().toISOString();
-      await supabase.from('runners').update({
-        last_seen: r.lastSeen,
-      }).eq('id', id);
+      const { error } = await supabase?.from('runners').update({
+        last_seen_at: r.lastSeen,
+      }).eq('id', id) ?? {};
+      if (error) log.error('touchRunner Supabase error:', error.message);
     }
   }
 

@@ -1,16 +1,20 @@
 // ─── Runner WebSocket Hub ─────────────────────────────────────────────────────
 //
 // Runners connect here on  ws://host/runner/ws?apiKey=XXX&runnerId=YYY
-// Once authenticated the hub:
-//   • keeps the live WS connection in a Map
-//   • forwards session requests / actions from the HTTP API to the runner
-//   • handles heartbeats and status transitions
+//
+// Auth flow:
+//   1. Runner sends its workspace API key (cak_live_...) as a query param
+//   2. Service hashes the key (SHA-256) and looks it up in Supabase runner_keys
+//   3. If found → connection is accepted; runner is bound to that workspace
+//   4. Runner sends a `register` message to record name/labels/version
 //
 import { WebSocket, WebSocketServer } from 'ws';
-import { IncomingMessage, Server } from 'http';
-import { randomUUID } from 'crypto';
-import { store } from '../store';
-import { log } from '../logger';
+import { IncomingMessage, Server }    from 'http';
+import { createHash }                 from 'crypto';
+import { randomUUID }                 from 'crypto';
+import { store }                      from '../store';
+import { log }                        from '../logger';
+import { supabase }                   from '../supabase';
 
 // ── Protocol types (Runner ↔ Service) ─────────────────────────────────────────
 
@@ -19,7 +23,6 @@ interface RunnerMsg {
   [key: string]: unknown;
 }
 
-// Pending action callbacks waiting for runner's action_result
 interface PendingAction {
   resolve: (result: unknown) => void;
   reject:  (err: Error)     => void;
@@ -28,14 +31,48 @@ interface PendingAction {
 
 const ACTION_TIMEOUT_MS = 30_000;
 
+// ── Key validation ─────────────────────────────────────────────────────────────
+//
+// Hashes the raw API key and looks it up in the Supabase runner_keys table.
+// Returns the workspace_id the key belongs to, or null if invalid.
+
+interface ValidatedKey {
+  workspaceId:  string;
+  runnerKeyId:  string;
+}
+
+async function validateRunnerKey(apiKey: string): Promise<ValidatedKey | null> {
+  if (!apiKey)    return null;
+  if (!supabase)  {
+    log.warn('Supabase not configured – cannot validate runner key');
+    return null;
+  }
+
+  const keyHash = createHash('sha256').update(apiKey).digest('hex');
+
+  const { data, error } = await supabase
+    .from('runner_keys')
+    .select('id, workspace_id')
+    .eq('key_hash', keyHash)
+    .maybeSingle();
+
+  if (error) {
+    log.error('runner_keys lookup failed:', error.message);
+    return null;
+  }
+
+  if (!data) return null;
+  return { workspaceId: data.workspace_id, runnerKeyId: data.id };
+}
+
 // ── Hub ───────────────────────────────────────────────────────────────────────
 
 export class RunnerHub {
-  private wss:            WebSocketServer;
+  private wss:             WebSocketServer;
   /** runnerId → open WS connection */
-  private connections   = new Map<string, WebSocket>();
+  private connections    = new Map<string, WebSocket>();
   /** actionId → pending resolver */
-  private pendingActions= new Map<string, PendingAction>();
+  private pendingActions = new Map<string, PendingAction>();
 
   constructor(server: Server) {
     this.wss = new WebSocketServer({ server, path: '/runner/ws' });
@@ -46,36 +83,37 @@ export class RunnerHub {
   // ── Connection lifecycle ───────────────────────────────────────────────────
 
   private onConnect(ws: WebSocket, req: IncomingMessage): void {
-    const url    = new URL(req.url!, 'http://localhost');
-    const apiKey = url.searchParams.get('apiKey') ?? '';
-    // Runners may pass a stable self-generated UUID so they survive reconnects
+    const url      = new URL(req.url!, 'http://localhost');
+    const apiKey   = url.searchParams.get('apiKey')   ?? '';
     const runnerId = url.searchParams.get('runnerId') ?? randomUUID();
 
-    const tenant = store.getTenantByApiKey(apiKey);
-    if (!tenant) {
-      log.warn(`Runner WS rejected – bad apiKey (id hint: ${runnerId})`);
-      ws.close(1008, 'Invalid API key');
-      return;
-    }
+    // Validate key asynchronously – don't block the event loop
+    validateRunnerKey(apiKey)
+      .then(validated => {
+        if (!validated) {
+          log.warn(`Runner rejected – invalid API key  (runnerId: ${runnerId})`);
+          ws.close(1008, 'Invalid API key');
+          return;
+        }
+        this.setupConnection(ws, runnerId, validated.workspaceId, validated.runnerKeyId);
+      })
+      .catch(err => {
+        log.error('Runner auth error:', err);
+        ws.close(1011, 'Authentication error');
+      });
+  }
 
-    log.info(`Runner connected: ${runnerId}  tenant: ${tenant.slug}`);
+  private setupConnection(ws: WebSocket, runnerId: string, workspaceId: string, runnerKeyId: string): void {
+    log.info(`Runner connected  id: ${runnerId}  workspace: ${workspaceId}`);
     this.connections.set(runnerId, ws);
 
-    // Tell runner its resolved identity + tenant info
-    this.send(ws, {
-      type:       'connected',
-      runnerId,
-      tenantId:   tenant.id,
-      tenantName: tenant.name,
-    });
+    // Confirm connection to the runner
+    this.send(ws, { type: 'connected', runnerId, workspaceId });
 
-    // ── Inactivity watchdog ───────────────────────────────────────────────────────────────
-    // Terminate the socket if no message arrives within HEARTBEAT_TIMEOUT_MS.
-    // The timer is reset on EVERY incoming message so normal heartbeats (every
-    // 30 s) keep the connection alive indefinitely.
+    // ── Inactivity watchdog ─────────────────────────────────────────────────
     const HEARTBEAT_TIMEOUT_MS = 90_000;
-    let   heartbeatTimer       = setTimeout(() => ws.terminate(), HEARTBEAT_TIMEOUT_MS);
-    const resetTimer           = () => {
+    let heartbeatTimer = setTimeout(() => ws.terminate(), HEARTBEAT_TIMEOUT_MS);
+    const resetTimer   = () => {
       clearTimeout(heartbeatTimer);
       heartbeatTimer = setTimeout(() => ws.terminate(), HEARTBEAT_TIMEOUT_MS);
     };
@@ -84,7 +122,7 @@ export class RunnerHub {
     ws.on('message', (raw) => {
       resetTimer();
       try {
-        this.onMessage(ws, runnerId, tenant.id, JSON.parse(raw.toString()) as RunnerMsg);
+        this.onMessage(ws, runnerId, workspaceId, runnerKeyId, JSON.parse(raw.toString()) as RunnerMsg);
       } catch (err) {
         log.error(`Bad message from runner ${runnerId}:`, err);
       }
@@ -93,7 +131,8 @@ export class RunnerHub {
     ws.on('close', () => {
       log.info(`Runner disconnected: ${runnerId}`);
       this.connections.delete(runnerId);
-      store.setRunnerStatus(runnerId, 'offline').catch(err => log.error('Failed to update runner status:', err));
+      store.setRunnerStatus(runnerId, 'offline')
+        .catch(err => log.error('Failed to update runner status:', err));
     });
 
     ws.on('error', (err) => log.error(`Runner WS error (${runnerId}):`, err.message));
@@ -101,36 +140,36 @@ export class RunnerHub {
 
   // ── Incoming messages from runner ─────────────────────────────────────────
 
-  private async onMessage(ws: WebSocket, runnerId: string, tenantId: string, msg: RunnerMsg): Promise<void> {
+  private async onMessage(
+    ws: WebSocket,
+    runnerId: string,
+    workspaceId: string,
+    runnerKeyId: string,
+    msg: RunnerMsg,
+  ): Promise<void> {
     log.debug(`← runner[${runnerId}] ${msg.type}`);
 
     switch (msg.type) {
 
-      // Runner announces itself after connecting
       case 'register': {
         const runner = await store.upsertRunner(
           runnerId,
-          tenantId,
-          (msg.name   as string)   || runnerId,
-          (msg.labels as string[]) || [],
-          (msg.version as string)  || '0.0.0',
+          workspaceId,
+          runnerKeyId,
+          (msg.name    as string)   || runnerId,
+          (msg.labels  as string[]) || [],
         );
         log.info(`Runner registered: "${runner.name}" (${runner.id}) labels=[${runner.labels}]`);
         this.send(ws, { type: 'registered', runnerId: runner.id, name: runner.name });
         break;
       }
 
-      // Runner is alive — reply with pong.
-      // Do NOT call setRunnerStatus here: the runner may be 'busy' (active
-      // session) and flipping it back to 'online' would allow a second session
-      // to be opened concurrently, causing interleaved actions.
       case 'heartbeat': {
         await store.touchRunner(runnerId);
         this.send(ws, { type: 'pong' });
         break;
       }
 
-      // Runner accepted a session request
       case 'session_accepted': {
         const { sessionId } = msg as { type: string; sessionId: string };
         store.updateSessionStatus(sessionId, 'active');
@@ -139,7 +178,6 @@ export class RunnerHub {
         break;
       }
 
-      // Runner rejected a session (e.g. already busy by external policy)
       case 'session_rejected': {
         const { sessionId, reason } = msg as { type: string; sessionId: string; reason?: string };
         store.updateSessionStatus(sessionId, 'closed');
@@ -148,7 +186,6 @@ export class RunnerHub {
         break;
       }
 
-      // Runner closed a session from its side
       case 'session_closed': {
         const { sessionId } = msg as { type: string; sessionId: string };
         store.updateSessionStatus(sessionId, 'closed');
@@ -157,13 +194,9 @@ export class RunnerHub {
         break;
       }
 
-      // Runner returns action result
       case 'action_result': {
         const { actionId, result, error } = msg as {
-          type: string;
-          actionId: string;
-          result: unknown;
-          error: string | null;
+          type: string; actionId: string; result: unknown; error: string | null;
         };
         const pending = this.pendingActions.get(actionId);
         if (pending) {
@@ -181,18 +214,10 @@ export class RunnerHub {
 
   // ── Public API (called by HTTP route handlers) ────────────────────────────
 
-  /**
-   * Send a session request to the runner.
-   * Returns false if the runner is not connected.
-   */
   requestSession(runnerId: string, sessionId: string, userId: string, userEmail: string): boolean {
     return this.sendToRunner(runnerId, { type: 'session_request', sessionId, userId, userEmail });
   }
 
-  /**
-   * Relay an action to the runner and await its result.
-   * Rejects after ACTION_TIMEOUT_MS if no response.
-   */
   dispatchAction(runnerId: string, sessionId: string, payload: unknown): Promise<unknown> {
     const ws = this.connections.get(runnerId);
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -210,9 +235,6 @@ export class RunnerHub {
     });
   }
 
-  /**
-   * Tell the runner to close a session, then mark it closed on our side too.
-   */
   closeSession(runnerId: string, sessionId: string): void {
     this.sendToRunner(runnerId, { type: 'close_session', sessionId });
     store.setRunnerStatus(runnerId, 'online');
