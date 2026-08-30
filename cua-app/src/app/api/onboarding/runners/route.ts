@@ -27,12 +27,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify user is member of workspace
-    const { data: membership } = await supabase
+    const { data: membership, error: membershipError } = await supabase
       .from("workspace_members")
-      .select("id")
+      .select("workspace_id")
       .eq("workspace_id", workspaceId)
       .eq("user_id", user.id)
       .maybeSingle();
+
+    console.log('[runners] user.id:', user.id, 'workspaceId:', workspaceId);
+    console.log('[runners] membership:', membership, 'error:', membershipError);
 
     if (!membership) {
       return NextResponse.json(

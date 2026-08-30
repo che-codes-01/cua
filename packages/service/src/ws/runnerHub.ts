@@ -87,23 +87,30 @@ export class RunnerHub {
     const apiKey   = url.searchParams.get('apiKey')   ?? '';
     const runnerId = url.searchParams.get('runnerId') ?? randomUUID();
 
-    // Validate key asynchronously – don't block the event loop
+    // Buffer any messages that arrive during async auth so they are not lost.
+    // (Some runners send `register` immediately on open before receiving `connected`.)
+    const messageQueue: Buffer[] = [];
+    const buffer = (raw: Buffer) => messageQueue.push(raw);
+    ws.on('message', buffer);
+
     validateRunnerKey(apiKey)
       .then(validated => {
+        ws.off('message', buffer);
         if (!validated) {
           log.warn(`Runner rejected – invalid API key  (runnerId: ${runnerId})`);
           ws.close(1008, 'Invalid API key');
           return;
         }
-        this.setupConnection(ws, runnerId, validated.workspaceId, validated.runnerKeyId);
+        this.setupConnection(ws, runnerId, validated.workspaceId, validated.runnerKeyId, messageQueue);
       })
       .catch(err => {
+        ws.off('message', buffer);
         log.error('Runner auth error:', err);
         ws.close(1011, 'Authentication error');
       });
   }
 
-  private setupConnection(ws: WebSocket, runnerId: string, workspaceId: string, runnerKeyId: string): void {
+  private setupConnection(ws: WebSocket, runnerId: string, workspaceId: string, runnerKeyId: string, buffered: Buffer[] = []): void {
     log.info(`Runner connected  id: ${runnerId}  workspace: ${workspaceId}`);
     this.connections.set(runnerId, ws);
 
@@ -136,6 +143,15 @@ export class RunnerHub {
     });
 
     ws.on('error', (err) => log.error(`Runner WS error (${runnerId}):`, err.message));
+
+    // Replay any messages that arrived before auth completed
+    for (const raw of buffered) {
+      try {
+        this.onMessage(ws, runnerId, workspaceId, runnerKeyId, JSON.parse(raw.toString()) as RunnerMsg);
+      } catch (err) {
+        log.error(`Bad buffered message from runner ${runnerId}:`, err);
+      }
+    }
   }
 
   // ── Incoming messages from runner ─────────────────────────────────────────

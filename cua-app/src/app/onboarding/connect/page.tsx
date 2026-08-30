@@ -52,6 +52,7 @@ export default function ConnectRunnerPage() {
 
   const [runners, setRunners] = useState<Runner[]>([]);
   const [checking, setChecking] = useState(true);
+  const [hasOnlineRunner, setHasOnlineRunner] = useState(false);
 
   let command = "";
   try {
@@ -108,9 +109,7 @@ export default function ConnectRunnerPage() {
           (runner: Runner) => runner.status === "online",
         );
 
-        if (online) {
-          router.push("/onboarding/complete");
-        }
+        if (online) setHasOnlineRunner(true);
       } finally {
         if (active) {
           setChecking(false);
@@ -369,13 +368,21 @@ export default function ConnectRunnerPage() {
           )}
         </div>
 
-        <div className="mt-8 flex justify-end">
+        <div className="mt-8 flex items-center justify-between">
           <Button
             variant="outline"
             onClick={() => router.push("/dashboard")}
             className="border-white/[0.08] bg-white/[0.02] text-xs text-white/30 hover:bg-white/[0.05] hover:text-white"
           >
             Skip for now
+          </Button>
+
+          <Button
+            onClick={() => router.push("/onboarding/complete")}
+            disabled={!hasOnlineRunner}
+            className="h-10 bg-white px-5 text-xs text-black hover:bg-white/90 disabled:cursor-not-allowed disabled:bg-white/[0.06] disabled:text-white/20"
+          >
+            {hasOnlineRunner ? "Continue" : "Waiting for runner…"}
             <FiArrowRight className="ml-2 size-3" />
           </Button>
         </div>

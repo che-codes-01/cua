@@ -37,12 +37,14 @@ CREATE TRIGGER on_workspace_created
 
 ALTER TABLE public.workspace_members ENABLE ROW LEVEL SECURITY;
 
+GRANT SELECT ON public.workspace_members TO authenticated;
+
 DROP POLICY IF EXISTS "workspace_members: members can view own row" ON public.workspace_members;
 CREATE POLICY "workspace_members: members can view own row"
   ON public.workspace_members
   FOR SELECT
   TO authenticated
-  USING (user_id = auth.uid());
+  USING ((select auth.uid()) = user_id);
 
 
 -- ── 3. RLS policies: runners ──────────────────────────────────────────────────
@@ -50,6 +52,8 @@ CREATE POLICY "workspace_members: members can view own row"
 -- Users may see runners that belong to a workspace they are a member of.
 
 ALTER TABLE public.runners ENABLE ROW LEVEL SECURITY;
+
+GRANT SELECT ON public.runners TO authenticated;
 
 DROP POLICY IF EXISTS "runners: workspace members can view" ON public.runners;
 CREATE POLICY "runners: workspace members can view"
@@ -61,6 +65,6 @@ CREATE POLICY "runners: workspace members can view"
       SELECT 1
       FROM   public.workspace_members wm
       WHERE  wm.workspace_id = runners.workspace_id
-      AND    wm.user_id      = auth.uid()
+      AND    wm.user_id      = (select auth.uid())
     )
   );
