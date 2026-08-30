@@ -91,27 +91,8 @@ export async function POST(request: Request) {
       );
     }
 
-    const { error: memberError } = await admin
-      .from("workspace_members")
-      .insert({
-        workspace_id: workspace.id,
-        user_id: user.id,
-        role: "owner",
-      });
-
-    if (memberError) {
-      await admin
-        .from("workspaces")
-        .delete()
-        .eq("id", workspace.id);
-
-      console.error(memberError);
-
-      return NextResponse.json(
-        { error: "Could not create workspace membership." },
-        { status: 500 }
-      );
-    }
+    // Note: workspace_members is populated automatically by the
+    // on_workspace_created trigger – no manual insert needed here.
 
     const { key, hash, prefix } = generateRunnerKey();
 
@@ -128,11 +109,6 @@ export async function POST(request: Request) {
         .single();
 
     if (keyError) {
-      await admin
-        .from("workspace_members")
-        .delete()
-        .eq("workspace_id", workspace.id);
-
       await admin
         .from("workspaces")
         .delete()
