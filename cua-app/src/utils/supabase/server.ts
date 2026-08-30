@@ -1,6 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 
 export async function createClient() {
@@ -44,14 +43,25 @@ export async function createClient() {
  * const user = await getAuthenticatedUser();
  * console.log(user.email);
  */
-export async function getAuthenticatedUser(): Promise<User> {
+export async function getAuthenticatedUser(): Promise<User | null> {
   const supabase = await createClient();
   const {
     data: { user },
     error,
   } = await supabase.auth.getUser();
+  console.log("getAuthenticatedUser: user:", user, "error:", error);
 
-  if (error || !user) redirect("/signin");
+  if (error) {
+    return null;
+  }
 
   return user;
+}
+
+export async function signOutUser() {
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signOut();
+  if (error) {
+    console.error("Error signing out:", error.message);
+  }
 }

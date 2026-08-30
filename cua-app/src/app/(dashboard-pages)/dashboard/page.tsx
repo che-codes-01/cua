@@ -1,8 +1,9 @@
-import { getAuthenticatedUser } from "@/utils/supabase/server";
+import SignOutButton from "@/app/(auth-pages)/signout/page";
 
 export default async function DashboardPage() {
-  const user = await getAuthenticatedUser();
-  console.log("Authenticated user:", user);
-
-  return <main className="">Dashboard</main>;
+  return (
+    <main className="">
+      {/* <SignOutButton buttonText="Sign Out" /> */}
+    </main>
+  );
 }
