@@ -5,27 +5,18 @@ import {
   FiArrowLeft,
   FiArrowRight,
   FiBookOpen,
-  FiBox,
-  FiGithub,
+  FiPlus,
   FiCheck,
-  FiChevronDown,
   FiChevronRight,
-  FiCircle,
   FiCode,
   FiCommand,
   FiCopy,
   FiCpu,
-  FiDatabase,
   FiExternalLink,
-  FiGlobe,
+  FiHelpCircle,
   FiKey,
-  FiLayers,
-  FiMenu,
-  FiMessageSquare,
   FiMonitor,
-  FiMousePointer,
   FiPlay,
-  FiPlus,
   FiSearch,
   FiServer,
   FiSettings,
@@ -33,240 +24,129 @@ import {
   FiTerminal,
   FiUsers,
   FiWifi,
-  FiX,
   FiZap,
 } from "react-icons/fi";
-import { RiNpmjsLine } from "react-icons/ri";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 
 import Logo from "@/components/custom/Logo";
 
-const sections = [
+const navigation = [
   {
     title: "GETTING STARTED",
-    items: [
-      { label: "Introduction", active: true },
-      { label: "Quickstart" },
-      { label: "Architecture" },
-      { label: "Concepts" },
-    ],
+    items: ["Overview", "Quickstart", "Connect a machine", "Your first action"],
   },
   {
     title: "RUNNERS",
-    items: [
-      { label: "Install a Runner" },
-      { label: "Runner Configuration" },
-      { label: "Runner Lifecycle" },
-      { label: "Runner Security" },
-    ],
+    items: ["Runners", "Add a runner", "Runner status", "Runner settings"],
   },
   {
-    title: "COMPUTER USE",
-    items: [
-      { label: "Sessions" },
-      { label: "Actions" },
-      { label: "Screenshots" },
-      { label: "Action Results" },
-    ],
-  },
-  {
-    title: "API REFERENCE",
-    items: [
-      { label: "Authentication" },
-      { label: "Runners API" },
-      { label: "Sessions API" },
-      { label: "Admin API" },
-    ],
+    title: "COMPUTER ACTIONS",
+    items: ["Sessions", "Actions", "Screenshots", "Action results"],
   },
   {
     title: "INTEGRATIONS",
-    items: [
-      { label: "n8n" },
-      { label: "REST API" },
-      { label: "SDK" },
-      { label: "WebSocket" },
-    ],
+    items: ["n8n", "API", "AI agents"],
+  },
+  {
+    title: "ACCOUNT",
+    items: ["Team members", "API keys", "Security"],
   },
 ];
 
-const endpointGroups = [
+const actionExamples = [
   {
-    title: "Authentication",
-    icon: FiKey,
-    endpoints: [
-      ["POST", "/auth/login", "Authenticate a user"],
-      ["POST", "/auth/register", "Create a tenant user"],
-      ["GET", "/auth/me", "Get current user"],
-    ],
-  },
-  {
-    title: "Runners",
+    name: "Screenshot",
+    description: "Capture the current screen of a connected machine.",
     icon: FiMonitor,
-    endpoints: [
-      ["GET", "/api/runners", "List available runners"],
-      ["GET", "/api/runners/:id", "Get runner details"],
-    ],
   },
   {
-    title: "Sessions",
+    name: "Click",
+    description: "Click at a specific location on the screen.",
     icon: FiActivity,
-    endpoints: [
-      ["POST", "/api/sessions", "Open a runner session"],
-      ["GET", "/api/sessions", "List your sessions"],
-      ["GET", "/api/sessions/:id", "Get session details"],
-      ["POST", "/api/sessions/:id/actions", "Execute an action"],
-      ["DELETE", "/api/sessions/:id", "Close a session"],
-    ],
-  },
-];
-
-const actions = [
-  {
-    type: "echo",
-    description: "Return a message from the runner.",
-    payload: `{
-  "type": "echo",
-  "message": "hello"
-}`,
   },
   {
-    type: "info",
-    description: "Return machine and runtime information.",
-    payload: `{
-  "type": "info"
-}`,
+    name: "Type",
+    description: "Enter text using the connected machine.",
+    icon: FiCommand,
   },
   {
-    type: "shell",
-    description: "Execute a command on the runner.",
-    payload: `{
-  "type": "shell",
-  "command": "hostname"
-}`,
+    name: "Keyboard",
+    description: "Send keyboard input to the active machine.",
+    icon: FiTerminal,
   },
 ];
 
 function CodeBlock({
   children,
-  title,
+  label = "Example",
 }: {
   children: React.ReactNode;
-  title?: string;
+  label?: string;
 }) {
   return (
-    <div className="my-6 overflow-hidden rounded-xl border border-white/[0.08] bg-[#0b0b0c]">
-      {title && (
-        <div className="flex h-9 items-center border-b border-white/[0.06] px-4">
-          <span className="font-mono text-[10px] text-white/25">{title}</span>
-        </div>
-      )}
+    <div className="my-6 overflow-hidden rounded-xl border border-white/[0.07] bg-[#0b0b0b]">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
+        <span className="font-mono text-[9px] uppercase tracking-[0.16em] text-white/20">
+          {label}
+        </span>
 
-      <div className="relative">
-        <button className="absolute right-3 top-3 rounded-md border border-white/[0.07] bg-white/[0.025] p-2 text-white/20 transition hover:text-white/50">
+        <button className="text-white/20 transition hover:text-white/50">
           <FiCopy className="size-3" />
         </button>
-
-        <pre className="overflow-x-auto p-5 pr-14 font-mono text-[11px] leading-6 text-white/45">
-          {children}
-        </pre>
       </div>
+
+      <pre className="overflow-x-auto p-5 font-mono text-[11px] leading-6 text-white/40">
+        {children}
+      </pre>
     </div>
   );
 }
 
-function MethodBadge({ method }: { method: string }) {
-  const styles: Record<string, string> = {
-    GET: "text-emerald-400/70 bg-emerald-400/[0.06] border-emerald-400/10",
-    POST: "text-blue-300/70 bg-blue-400/[0.06] border-blue-400/10",
-    DELETE: "text-red-300/60 bg-red-400/[0.05] border-red-400/10",
-    PUT: "text-yellow-300/60 bg-yellow-400/[0.05] border-yellow-400/10",
-  };
-
+function NavSection({
+  title,
+  items,
+  active,
+}: {
+  title: string;
+  items: string[];
+  active?: string;
+}) {
   return (
-    <span
-      className={`rounded border px-1.5 py-0.5 font-mono text-[9px] ${
-        styles[method] || "text-white/40 border-white/10"
-      }`}
-    >
-      {method}
-    </span>
-  );
-}
+    <div>
+      <p className="mb-3 px-3 font-mono text-[9px] tracking-[0.18em] text-white/20">
+        {title}
+      </p>
 
-function Sidebar() {
-  return (
-    <aside className="hidden w-64 shrink-0 border-r border-white/[0.06] lg:block">
-      <div className="sticky top-20 h-[calc(100vh-80px)] overflow-y-auto px-6 py-8">
-        <div className="mb-7">
-          <div className="flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2.5">
-            <FiSearch className="size-3 text-white/25" />
+      <div className="space-y-0.5">
+        {items.map((item) => {
+          const isActive = item === active;
 
-            <span className="text-xs text-white/25">Search docs</span>
+          return (
+            <a
+              key={item}
+              href="#"
+              className={`group flex items-center rounded-md px-3 py-2 text-[12px] transition ${
+                isActive
+                  ? "bg-white/[0.06] text-white/75"
+                  : "text-white/30 hover:bg-white/[0.03] hover:text-white/60"
+              }`}
+            >
+              {isActive && (
+                <span className="mr-2 size-1 rounded-full bg-white/70" />
+              )}
 
-            <kbd className="ml-auto rounded border border-white/[0.07] px-1.5 py-0.5 font-mono text-[8px] text-white/15">
-              ⌘K
-            </kbd>
-          </div>
-        </div>
+              {item}
 
-        <nav className="space-y-8">
-          {sections.map((section) => (
-            <div key={section.title}>
-              <p className="mb-3 px-3 font-mono text-[9px] font-medium tracking-[0.18em] text-white/20">
-                {section.title}
-              </p>
-
-              <div className="space-y-0.5">
-                {section.items.map((item) => (
-                  <a
-                    key={item.label}
-                    href="#"
-                    className={`group flex items-center rounded-md px-3 py-2 text-[12px] transition ${
-                      item.active
-                        ? "bg-white/[0.06] text-white/75"
-                        : "text-white/30 hover:bg-white/[0.03] hover:text-white/55"
-                    }`}
-                  >
-                    {item.active && (
-                      <span className="mr-2 size-1 rounded-full bg-white/70" />
-                    )}
-
-                    {item.label}
-
-                    {!item.active && (
-                      <FiChevronRight className="ml-auto size-3 opacity-0 transition group-hover:opacity-40" />
-                    )}
-                  </a>
-                ))}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        <div className="mt-10 border-t border-white/[0.06] pt-6">
-          <a
-            href="#"
-            className="flex items-center gap-3 px-3 text-[11px] text-white/25 hover:text-white/50"
-          >
-            <FiGithub className="size-3.5" />
-            GitHub
-            <FiExternalLink className="ml-auto size-3" />
-          </a>
-
-          <a
-            href="#"
-            className="mt-4 flex items-center gap-3 px-3 text-[11px] text-white/25 hover:text-white/50"
-          >
-            <FiActivity className="size-3.5" />
-            System status
-            <FiExternalLink className="ml-auto size-3" />
-          </a>
-        </div>
+              {!isActive && (
+                <FiChevronRight className="ml-auto size-3 text-white/0 transition group-hover:text-white/20" />
+              )}
+            </a>
+          );
+        })}
       </div>
-    </aside>
+    </div>
   );
 }
 
@@ -279,229 +159,169 @@ function Topbar() {
 
           <div className="hidden h-5 w-px bg-white/[0.08] lg:block" />
 
-          <span className="hidden font-mono text-[10px] text-white/20 lg:block">
+          <span className="hidden font-mono text-[10px] tracking-widest text-white/20 lg:block">
             DOCS
           </span>
         </div>
 
-        <div className="flex flex-1 items-center justify-between">
-          <div className="hidden items-center gap-7 text-[12px] text-white/30 md:flex">
-            <a href="#" className="hover:text-white/70">
+        <div className="flex flex-1 items-center justify-end gap-3">
+          <div className="mr-4 hidden items-center gap-6 text-[12px] text-white/30 md:flex">
+            <a href="#" className="text-white/60 transition hover:text-white">
               Documentation
             </a>
 
-            <a href="#" className="hover:text-white/70">
-              API Reference
+            <a href="#" className="transition hover:text-white">
+              Help
             </a>
 
-            <a href="#" className="hover:text-white/70">
-              Changelog
+            <a href="#" className="transition hover:text-white">
+              Status
             </a>
           </div>
 
-          <div className="ml-auto flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="hidden text-white/30 hover:bg-white/[0.04] hover:text-white/70 sm:flex"
-            >
-              <FiGithub className="mr-2 size-3.5" />
-              GitHub
-            </Button>
-
-            <Button
-              size="sm"
-              className="hidden bg-white text-black hover:bg-white/90 sm:flex"
-            >
-              Dashboard
-              <FiArrowRight className="ml-2 size-3" />
-            </Button>
-
-            <button className="rounded-md p-2 text-white/30 lg:hidden">
-              <FiMenu className="size-4" />
-            </button>
-          </div>
+          <Button
+            size="sm"
+            className="hidden bg-white text-black hover:bg-white/90 sm:flex"
+          >
+            Dashboard
+            <FiArrowRight className="ml-2 size-3" />
+          </Button>
         </div>
       </div>
     </header>
   );
 }
 
-function ArchitectureDiagram() {
+function Sidebar() {
   return (
-    <div className="my-8 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0a0a0a]">
-      <div className="border-b border-white/[0.06] px-5 py-3">
-        <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-white/20">
-          System architecture
-        </span>
-      </div>
+    <aside className="hidden w-64 shrink-0 border-r border-white/[0.06] lg:block">
+      <div className="sticky top-20 h-[calc(100vh-80px)] overflow-y-auto px-6 py-8">
+        <div className="mb-8 flex items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2.5">
+          <FiSearch className="size-3 text-white/25" />
 
-      <div className="relative p-6 sm:p-10">
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
-            <div className="flex size-9 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.025]">
-              <FiMonitor className="size-4 text-white/45" />
-            </div>
+          <span className="text-xs text-white/25">Search documentation</span>
 
-            <p className="mt-4 text-xs font-medium text-white/60">User</p>
-
-            <p className="mt-1 text-[10px] leading-5 text-white/20">
-              Browser, dashboard, agent
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-white/[0.1] bg-white/[0.035] p-5">
-            <div className="flex size-9 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04]">
-              <FiServer className="size-4 text-white/60" />
-            </div>
-
-            <p className="mt-4 text-xs font-medium text-white/70">
-              Actions Service
-            </p>
-
-            <p className="mt-1 text-[10px] leading-5 text-white/25">
-              Auth · sessions · routing
-            </p>
-          </div>
-
-          <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-5">
-            <div className="flex size-9 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.025]">
-              <FiCpu className="size-4 text-white/45" />
-            </div>
-
-            <p className="mt-4 text-xs font-medium text-white/60">Runner</p>
-
-            <p className="mt-1 text-[10px] leading-5 text-white/20">
-              Customer machine
-            </p>
-          </div>
+          <kbd className="ml-auto rounded border border-white/[0.07] px-1.5 py-0.5 font-mono text-[8px] text-white/15">
+            ⌘K
+          </kbd>
         </div>
 
-        <div className="my-4 hidden items-center justify-center sm:flex">
-          <div className="h-px w-[28%] bg-white/[0.08]" />
+        <nav className="space-y-8">
+          <NavSection
+            title="GETTING STARTED"
+            active="Overview"
+            items={[
+              "Overview",
+              "Quickstart",
+              "Connect a machine",
+              "Your first action",
+            ]}
+          />
 
-          <FiChevronRight className="mx-3 size-3 text-white/20" />
+          <NavSection
+            title="RUNNERS"
+            items={[
+              "Runners",
+              "Add a runner",
+              "Runner status",
+              "Runner settings",
+            ]}
+          />
 
-          <div className="h-px w-[28%] bg-white/[0.08]" />
-        </div>
+          <NavSection
+            title="COMPUTER ACTIONS"
+            items={["Sessions", "Actions", "Screenshots", "Action results"]}
+          />
 
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.01] p-4 text-center">
-            <p className="font-mono text-[9px] text-white/20">REST / HTTPS</p>
-          </div>
+          <NavSection
+            title="INTEGRATIONS"
+            items={["n8n", "API", "AI agents"]}
+          />
 
-          <div className="rounded-xl border border-dashed border-white/[0.08] bg-white/[0.01] p-4 text-center">
-            <p className="font-mono text-[9px] text-white/20">WEBSOCKET</p>
-          </div>
+          <NavSection
+            title="ACCOUNT"
+            items={["Team members", "API keys", "Security"]}
+          />
+        </nav>
+
+        <div className="mt-10 border-t border-white/[0.06] pt-6">
+          <a
+            href="#"
+            className="flex items-center gap-3 px-3 text-[11px] text-white/25 transition hover:text-white/50"
+          >
+            <FiHelpCircle className="size-3.5" />
+            Help center
+            <FiExternalLink className="ml-auto size-3" />
+          </a>
         </div>
       </div>
-    </div>
+    </aside>
   );
 }
 
-function Quickstart() {
+function FeatureCard({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+}) {
   return (
-    <section id="quickstart" className="mt-20 scroll-mt-28">
-      <div className="mb-7 flex items-center gap-3">
-        <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-          <FiPlay className="size-3.5 text-white/50" />
-        </div>
-
-        <h2 className="text-2xl font-semibold tracking-tight">Quickstart</h2>
+    <div className="rounded-xl border border-white/[0.07] bg-white/[0.015] p-5 transition hover:border-white/[0.11] hover:bg-white/[0.025]">
+      <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.07] bg-white/[0.025]">
+        <Icon className="size-3.5 text-white/40" />
       </div>
 
-      <p className="text-sm leading-7 text-white/35">
-        Get the Actions Service running locally, connect a machine as a runner,
-        and execute your first computer action.
-      </p>
+      <p className="mt-4 text-xs font-medium text-white/60">{title}</p>
 
-      <div className="mt-8 space-y-3">
-        {[
-          ["01", "Install the service", "npm install"],
-          ["02", "Start the service", "npm run dev"],
-          ["03", "Connect a runner", "npm run dev"],
-          ["04", "Create a session", "POST /api/sessions"],
-        ].map(([number, title, command]) => (
-          <div
-            key={number}
-            className="flex items-center gap-4 rounded-xl border border-white/[0.07] bg-white/[0.015] p-4"
-          >
-            <span className="font-mono text-[9px] text-white/15">{number}</span>
-
-            <div className="flex-1">
-              <p className="text-xs text-white/60">{title}</p>
-
-              <p className="mt-1 font-mono text-[10px] text-white/20">
-                {command}
-              </p>
-            </div>
-
-            <FiChevronRight className="size-3 text-white/15" />
-          </div>
-        ))}
-      </div>
-
-      <CodeBlock title="terminal">
-        {`# Computer Actions Service
-cd computer-actions-service
-npm install
-npm run dev
-
-# Runner
-cd runner
-npm install
-npm run dev`}
-      </CodeBlock>
-    </section>
+      <p className="mt-2 text-[11px] leading-5 text-white/25">{description}</p>
+    </div>
   );
 }
 
 export default function DocsPage() {
   return (
-    <main className="min-h-screen bg-[#080808] text-white selection:bg-white/20">
+    <main className="min-h-screen bg-[#080808] text-white">
       <Topbar />
 
       <div className="mx-auto flex max-w-[1500px]">
         <Sidebar />
 
-        <div className="min-w-0 flex-1">
+        <article className="min-w-0 flex-1">
           <div className="mx-auto max-w-4xl px-6 py-12 lg:px-12 lg:py-16 xl:px-20">
             {/* Breadcrumb */}
 
             <div className="mb-8 flex items-center gap-2 font-mono text-[10px] text-white/20">
-              <span>Docs</span>
+              <span>Documentation</span>
               <FiChevronRight className="size-3" />
-              <span className="text-white/40">Getting Started</span>
+              <span className="text-white/40">Getting started</span>
             </div>
 
-            {/* Header */}
+            {/* Page header */}
 
             <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <Badge
-                  variant="outline"
-                  className="border-white/[0.08] bg-white/[0.02] font-mono text-[9px] font-normal text-white/30"
-                >
-                  v0.1
-                </Badge>
-
-                <span className="font-mono text-[10px] text-emerald-400/60">
-                  ● operational
-                </span>
-              </div>
+              <Badge
+                variant="outline"
+                className="border-white/[0.08] bg-white/[0.02] font-mono text-[9px] font-normal text-white/30"
+              >
+                GETTING STARTED
+              </Badge>
 
               <h1 className="mt-6 text-4xl font-semibold tracking-[-0.045em] sm:text-5xl">
-                Computer Actions
+                Welcome to your
+                <br />
+                computer workspace.
               </h1>
 
-              <p className="mt-5 max-w-2xl text-base leading-7 text-white/35">
-                Infrastructure for giving AI agents access to real computers.
-                Connect customer-owned machines as runners and execute computer
-                actions through a central service.
+              <p className="mt-6 max-w-2xl text-[15px] leading-7 text-white/35">
+                Connect your machines, give them capabilities, and let your
+                workflows and AI agents perform actions on them.
               </p>
             </div>
 
-            {/* Callout */}
+            {/* Intro */}
 
             <div className="mt-10 rounded-xl border border-white/[0.08] bg-white/[0.025] p-5">
               <div className="flex gap-4">
@@ -511,90 +331,302 @@ export default function DocsPage() {
 
                 <div>
                   <p className="text-xs font-medium text-white/65">
-                    What this provides
+                    How it works
                   </p>
 
                   <p className="mt-2 text-xs leading-6 text-white/30">
-                    A relay layer between your applications and machines running
-                    your custom computer-use driver. The service manages
-                    authentication, tenants, runners, sessions, and action
-                    delivery.
+                    A runner connects your machine to your workspace. Once it is
+                    online, you can open a session and send computer actions to
+                    it. The same capabilities can also be used from n8n and AI
+                    agent workflows.
                   </p>
                 </div>
               </div>
             </div>
 
-            {/* Architecture */}
+            {/* Core concepts */}
 
-            <section id="architecture" className="mt-20 scroll-mt-28">
-              <div className="mb-7 flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                  <FiLayers className="size-3.5 text-white/50" />
-                </div>
-
+            <section className="mt-20">
+              <div className="mb-7">
                 <h2 className="text-2xl font-semibold tracking-tight">
-                  Architecture
+                  The basics
                 </h2>
+
+                <p className="mt-3 text-sm leading-6 text-white/30">
+                  There are three things you need to know.
+                </p>
               </div>
 
-              <p className="text-sm leading-7 text-white/35">
-                The system consists of three primary components: the application
-                or employee client, the central Actions Service, and one or more
-                customer-owned runners.
-              </p>
-
-              <ArchitectureDiagram />
-
               <div className="grid gap-3 sm:grid-cols-3">
-                {[
-                  {
-                    icon: FiUsers,
-                    title: "Tenant",
-                    text: "Owns runners and users.",
-                  },
-                  {
-                    icon: FiServer,
-                    title: "Actions Service",
-                    text: "Authenticates and routes actions.",
-                  },
-                  {
-                    icon: FiCpu,
-                    title: "Runner",
-                    text: "Executes actions locally.",
-                  },
-                ].map((item) => {
-                  const Icon = item.icon;
+                <FeatureCard
+                  icon={FiCpu}
+                  title="Runner"
+                  description="A lightweight app that connects a machine to your workspace."
+                />
 
-                  return (
-                    <Card
-                      key={item.title}
-                      className="border-white/[0.07] bg-white/[0.015] p-5"
-                    >
-                      <Icon className="size-4 text-white/30" />
+                <FeatureCard
+                  icon={FiActivity}
+                  title="Session"
+                  description="A temporary connection to a specific runner."
+                />
 
-                      <p className="mt-4 text-xs font-medium text-white/55">
-                        {item.title}
-                      </p>
-
-                      <p className="mt-2 text-[11px] leading-5 text-white/20">
-                        {item.text}
-                      </p>
-                    </Card>
-                  );
-                })}
+                <FeatureCard
+                  icon={FiCommand}
+                  title="Action"
+                  description="An instruction performed on the machine."
+                />
               </div>
             </section>
 
             {/* Quickstart */}
 
-            <Quickstart />
+            <section id="quickstart" className="mt-24 scroll-mt-28">
+              <div className="mb-7 flex items-center gap-3">
+                <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
+                  <FiPlay className="size-3.5 text-white/45" />
+                </div>
+
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  Quickstart
+                </h2>
+              </div>
+
+              <p className="text-sm leading-7 text-white/35">
+                Get a runner connected in 5 minutes. Copy & paste ready commands.
+              </p>
+
+              <div className="mt-8 space-y-3">
+                {[
+                  {
+                    number: "01",
+                    title: "Install runner CLI",
+                    description:
+                      "npm install -g github:che-codes-01/cua#packages/runner",
+                  },
+                  {
+                    number: "02",
+                    title: "Create API key in onboarding",
+                    description:
+                      "Go to workspace onboarding to generate your API key",
+                  },
+                  {
+                    number: "03",
+                    title: "Set environment variables",
+                    description:
+                      "Export RUNNER_API_KEY, RUNNER_SERVICE_URL, RUNNER_NAME",
+                  },
+                  {
+                    number: "04",
+                    title: "Start runner",
+                    description:
+                      "cua-runner start — machine appears online in seconds",
+                  },
+                ].map((step) => (
+                  <div
+                    key={step.number}
+                    className="flex gap-5 rounded-xl border border-white/[0.07] bg-white/[0.015] p-5"
+                  >
+                    <span className="font-mono text-[9px] text-white/15">
+                      {step.number}
+                    </span>
+
+                    <div>
+                      <p className="text-xs font-medium text-white/60">
+                        {step.title}
+                      </p>
+
+                      <p className="mt-1.5 text-[11px] leading-5 text-white/25">
+                        {step.description}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* Connect machine */}
+
+            <section id="connect" className="mt-24 scroll-mt-28">
+              <div className="mb-7 flex items-center gap-3">
+                <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
+                  <FiMonitor className="size-3.5 text-white/45" />
+                </div>
+
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  Connect a machine
+                </h2>
+              </div>
+
+              <p className="text-sm leading-7 text-white/35">
+                Install the CUA runner on any machine to connect it to your workspace.
+              </p>
+
+              <h3 className="mt-10 text-sm font-medium text-white/60">
+                1. Install the runner
+              </h3>
+
+              <p className="mt-2 text-[12px] leading-6 text-white/30">
+                Install globally via npm:
+              </p>
+
+              <CodeBlock label="Install">
+                {`npm install -g github:che-codes-01/cua#packages/runner`}
+              </CodeBlock>
+
+              <h3 className="mt-8 text-sm font-medium text-white/60">
+                2. Get your API key
+              </h3>
+
+              <p className="mt-2 text-[12px] leading-6 text-white/30">
+                Go to onboarding in your workspace to generate an API key. The key starts with <code>cak_live_</code>.
+              </p>
+
+              <h3 className="mt-8 text-sm font-medium text-white/60">
+                3. Configure environment
+              </h3>
+
+              <p className="mt-2 text-[12px] leading-6 text-white/30">
+                Create a <code>.env</code> file or export these variables:
+              </p>
+
+              <CodeBlock label=".env or terminal export">
+                {`RUNNER_API_KEY=cak_live_XXXX...
+RUNNER_SERVICE_URL=https://your-app-domain.com
+RUNNER_NAME=my-machine
+RUNNER_LABELS=production,linux`}
+              </CodeBlock>
+
+              <p className="mt-4 text-[12px] leading-6 text-white/30">
+                Replace <code>RUNNER_API_KEY</code> with your actual key and <code>RUNNER_SERVICE_URL</code> with your app URL.
+              </p>
+
+              <h3 className="mt-8 text-sm font-medium text-white/60">
+                4. Start the runner
+              </h3>
+
+              <CodeBlock label="Terminal">
+                {`cua-runner start`}
+              </CodeBlock>
+
+              <p className="mt-4 text-[12px] leading-6 text-white/30">
+                Or with inline environment variables:
+              </p>
+
+              <CodeBlock label="Terminal with env">
+                {`RUNNER_API_KEY="cak_live_..." \\
+RUNNER_SERVICE_URL="https://your-domain.com" \\
+RUNNER_NAME="my-machine" \\
+cua-runner start`}
+              </CodeBlock>
+
+              <h3 className="mt-8 text-sm font-medium text-white/60">
+                Docker
+              </h3>
+
+              <p className="mt-2 text-[12px] leading-6 text-white/30">
+                Run runner in Docker:
+              </p>
+
+              <CodeBlock label="docker run">
+                {`docker run -d \\
+  -e RUNNER_API_KEY="cak_live_..." \\
+  -e RUNNER_SERVICE_URL="https://your-domain.com" \\
+  -e RUNNER_NAME="docker-runner" \\
+  -e RUNNER_LABELS="docker" \\
+  node:20-alpine npx -g github:che-codes-01/cua#packages/runner`}
+              </CodeBlock>
+
+              <h3 className="mt-8 text-sm font-medium text-white/60">
+                Docker Compose
+              </h3>
+
+              <p className="mt-2 text-[12px] leading-6 text-white/30">
+                Create <code>docker-compose.yml</code>:
+              </p>
+
+              <CodeBlock label="docker-compose.yml">
+                {`version: "3.8"
+
+services:
+  runner:
+    image: node:20-alpine
+    environment:
+      RUNNER_API_KEY: cak_live_XXXX...
+      RUNNER_SERVICE_URL: https://your-domain.com
+      RUNNER_NAME: compose-runner
+      RUNNER_LABELS: docker,production
+    command: npx -g github:che-codes-01/cua#packages/runner
+    restart: unless-stopped`}
+              </CodeBlock>
+
+              <p className="mt-4 text-[12px] leading-6 text-white/30">
+                Start it:
+              </p>
+
+              <CodeBlock label="Terminal">
+                {`docker-compose up -d`}
+              </CodeBlock>
+
+              <h3 className="mt-8 text-sm font-medium text-white/60">
+                Systemd Service (Linux)
+              </h3>
+
+              <p className="mt-2 text-[12px] leading-6 text-white/30">
+                Create <code>/etc/systemd/system/cua-runner.service</code>:
+              </p>
+
+              <CodeBlock label="/etc/systemd/system/cua-runner.service">
+                {`[Unit]
+Description=CUA Runner
+After=network.target
+
+[Service]
+Type=simple
+User=cua
+Environment="RUNNER_API_KEY=cak_live_..."
+Environment="RUNNER_SERVICE_URL=https://your-domain.com"
+Environment="RUNNER_NAME=linux-runner"
+ExecStart=/usr/local/bin/cua-runner start
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target`}
+              </CodeBlock>
+
+              <p className="mt-4 text-[12px] leading-6 text-white/30">
+                Enable & start:
+              </p>
+
+              <CodeBlock label="Terminal">
+                {`sudo systemctl enable cua-runner
+sudo systemctl start cua-runner
+sudo systemctl status cua-runner`}
+              </CodeBlock>
+
+              <div className="mt-6 rounded-xl border border-emerald-400/[0.1] bg-emerald-400/[0.025] p-5">
+                <div className="flex gap-3">
+                  <FiCheck className="mt-0.5 size-4 shrink-0 text-emerald-400/60" />
+
+                  <div>
+                    <p className="text-xs font-medium text-emerald-300/70">
+                      Runner connected
+                    </p>
+
+                    <p className="mt-1.5 text-[11px] leading-5 text-emerald-200/30">
+                      Once the runner starts, it will automatically appear as online in your workspace.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </section>
 
             {/* Runners */}
 
-            <section className="mt-24 scroll-mt-28">
+            <section id="runners" className="mt-24 scroll-mt-28">
               <div className="mb-7 flex items-center gap-3">
                 <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                  <FiCpu className="size-3.5 text-white/50" />
+                  <FiServer className="size-3.5 text-white/45" />
                 </div>
 
                 <h2 className="text-2xl font-semibold tracking-tight">
@@ -603,70 +635,62 @@ export default function DocsPage() {
               </div>
 
               <p className="text-sm leading-7 text-white/35">
-                A runner is a lightweight agent installed on a customer machine.
-                It maintains a WebSocket connection to the Actions Service and
-                waits for work.
+                Runners are the machines available to your workspace. Each
+                runner has a name, status, labels, and connection information.
               </p>
 
-              <CodeBlock title=".env">
-                {`COMPUTER_ACTIONS_SERVICE_URL=ws://localhost:3000
-COMPUTER_ACTIONS_SERVICE_API_KEY=<tenant-api-key>
+              <div className="mt-8 overflow-hidden rounded-xl border border-white/[0.08]">
+                <div className="grid grid-cols-3 border-b border-white/[0.06] bg-white/[0.025] px-5 py-3 font-mono text-[9px] uppercase tracking-wider text-white/20">
+                  <span>Status</span>
+                  <span>Meaning</span>
+                  <span>Actions</span>
+                </div>
 
-RUNNER_NAME=my-macbook
-RUNNER_LABELS=macos,arm64`}
-              </CodeBlock>
-
-              <div className="my-8 grid gap-3 sm:grid-cols-2">
                 {[
-                  {
-                    icon: FiWifi,
-                    title: "Persistent connection",
-                    text: "The runner maintains a WebSocket connection and reconnects automatically.",
-                  },
-                  {
-                    icon: FiShield,
-                    title: "Tenant isolation",
-                    text: "A runner belongs to exactly one tenant and cannot be accessed by another tenant.",
-                  },
-                  {
-                    icon: FiActivity,
-                    title: "Heartbeat",
-                    text: "Regular heartbeats allow the service to determine runner availability.",
-                  },
-                  {
-                    icon: FiSettings,
-                    title: "Labels",
-                    text: "Attach labels such as macos, arm64, chrome, or production for routing.",
-                  },
-                ].map((item) => {
-                  const Icon = item.icon;
+                  [
+                    "Online",
+                    "The machine is connected and ready.",
+                    "Available",
+                  ],
+                  [
+                    "Offline",
+                    "The runner is not currently connected.",
+                    "Unavailable",
+                  ],
+                  ["Busy", "The machine is currently being used.", "In use"],
+                ].map(([status, meaning, action]) => (
+                  <div
+                    key={status}
+                    className="grid grid-cols-3 border-b border-white/[0.05] px-5 py-4 last:border-0"
+                  >
+                    <span className="flex items-center gap-2 text-[10px] text-white/45">
+                      <span
+                        className={`size-1.5 rounded-full ${
+                          status === "Online"
+                            ? "bg-emerald-400/60"
+                            : status === "Busy"
+                              ? "bg-yellow-400/50"
+                              : "bg-white/15"
+                        }`}
+                      />
 
-                  return (
-                    <div
-                      key={item.title}
-                      className="rounded-xl border border-white/[0.07] bg-white/[0.015] p-5"
-                    >
-                      <Icon className="size-4 text-white/35" />
+                      {status}
+                    </span>
 
-                      <p className="mt-4 text-xs font-medium text-white/55">
-                        {item.title}
-                      </p>
+                    <span className="text-[10px] text-white/25">{meaning}</span>
 
-                      <p className="mt-2 text-[11px] leading-5 text-white/20">
-                        {item.text}
-                      </p>
-                    </div>
-                  );
-                })}
+                    <span className="text-[10px] text-white/25">{action}</span>
+                  </div>
+                ))}
               </div>
             </section>
 
             {/* Sessions */}
 
-            <section className="mt-24 scroll-mt-28">
+            <section id="sessions" className="mt-24 scroll-mt-28">
               <div className="mb-7 flex items-center gap-3">
                 <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                  <FiCommand className="size-3.5 text-white/50" />
+                  <FiWifi className="size-3.5 text-white/45" />
                 </div>
 
                 <h2 className="text-2xl font-semibold tracking-tight">
@@ -675,358 +699,278 @@ RUNNER_LABELS=macos,arm64`}
               </div>
 
               <p className="text-sm leading-7 text-white/35">
-                A session represents an active connection between a user and a
-                runner. Actions dispatched during the session are routed
-                exclusively to that runner.
+                A session gives you temporary access to a specific runner. Start
+                a session when you want to perform actions on a machine.
               </p>
 
-              <CodeBlock title="create-session.sh">
-                {`curl -X POST http://localhost:3000/api/sessions \\
-  -H "Authorization: Bearer $TOKEN" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "runnerId": "runner_8f3a2"
-  }'`}
-              </CodeBlock>
+              <div className="mt-8 grid gap-3 sm:grid-cols-3">
+                <FeatureCard
+                  icon={FiPlus}
+                  title="Start"
+                  description="Choose an online runner and start a session."
+                />
 
-              <div className="overflow-hidden rounded-xl border border-white/[0.08]">
-                <div className="grid grid-cols-4 border-b border-white/[0.06] bg-white/[0.025] px-4 py-3 font-mono text-[9px] uppercase tracking-wider text-white/20">
-                  <span>State</span>
-                  <span>Meaning</span>
-                  <span>Runner</span>
-                  <span>Actions</span>
-                </div>
+                <FeatureCard
+                  icon={FiCommand}
+                  title="Use"
+                  description="Send actions while your session is active."
+                />
 
-                {[
-                  ["pending", "Waiting for runner", "—", "Blocked"],
-                  ["active", "Session accepted", "Connected", "Allowed"],
-                  ["closed", "Session ended", "Released", "Blocked"],
-                ].map(([state, meaning, runner, action]) => (
-                  <div
-                    key={state}
-                    className="grid grid-cols-4 border-b border-white/[0.05] px-4 py-4 last:border-0"
-                  >
-                    <span className="font-mono text-[10px] text-white/40">
-                      {state}
-                    </span>
-
-                    <span className="text-[10px] text-white/25">{meaning}</span>
-
-                    <span className="text-[10px] text-white/25">{runner}</span>
-
-                    <span className="text-[10px] text-white/25">{action}</span>
-                  </div>
-                ))}
+                <FeatureCard
+                  icon={FiCheck}
+                  title="Finish"
+                  description="Close the session when you are done."
+                />
               </div>
             </section>
 
             {/* Actions */}
 
-            <section className="mt-24 scroll-mt-28">
+            <section id="actions" className="mt-24 scroll-mt-28">
               <div className="mb-7 flex items-center gap-3">
                 <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                  <FiMousePointer className="size-3.5 text-white/50" />
+                  <FiCommand className="size-3.5 text-white/45" />
                 </div>
 
                 <h2 className="text-2xl font-semibold tracking-tight">
-                  Actions
+                  Computer actions
                 </h2>
               </div>
 
               <p className="text-sm leading-7 text-white/35">
-                Actions are JSON messages sent to the runner. The payload is
-                intentionally flexible so your custom computer-use driver can
-                define its own action schema.
+                Actions are the operations performed by a runner. Your workflows
+                can use actions to interact with applications, browsers, and the
+                desktop.
               </p>
 
-              <div className="mt-8 space-y-3">
-                {actions.map((action) => (
-                  <Card
-                    key={action.type}
-                    className="overflow-hidden border-white/[0.07] bg-white/[0.015] p-0"
-                  >
-                    <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
-                      <span className="rounded-md bg-white/[0.05] px-2 py-1 font-mono text-[10px] text-white/55">
-                        {action.type}
-                      </span>
-
-                      <p className="text-xs text-white/30">
-                        {action.description}
-                      </p>
-                    </div>
-
-                    <pre className="overflow-x-auto p-5 font-mono text-[10px] leading-6 text-white/30">
-                      {action.payload}
-                    </pre>
-                  </Card>
+              <div className="mt-8 grid gap-3 sm:grid-cols-2">
+                {actionExamples.map((action) => (
+                  <FeatureCard
+                    key={action.name}
+                    icon={action.icon}
+                    title={action.name}
+                    description={action.description}
+                  />
                 ))}
               </div>
-            </section>
 
-            {/* API */}
+              <h3 className="mt-10 text-sm font-medium text-white/60">
+                Sending an action
+              </h3>
 
-            <section className="mt-24 scroll-mt-28">
-              <div className="mb-7 flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                  <FiCode className="size-3.5 text-white/50" />
-                </div>
-
-                <h2 className="text-2xl font-semibold tracking-tight">
-                  API reference
-                </h2>
-              </div>
-
-              <p className="text-sm leading-7 text-white/35">
-                The HTTP API is the primary interface for applications,
-                dashboards, AI agents, and workflow systems.
+              <p className="mt-2 text-[12px] leading-6 text-white/30">
+                Actions are sent to the active session. The runner performs the
+                action and returns its result.
               </p>
 
-              <div className="mt-8 space-y-4">
-                {endpointGroups.map((group) => {
-                  const Icon = group.icon;
-
-                  return (
-                    <Card
-                      key={group.title}
-                      className="overflow-hidden border-white/[0.07] bg-white/[0.015] p-0"
-                    >
-                      <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
-                        <Icon className="size-3.5 text-white/30" />
-
-                        <span className="text-xs font-medium text-white/55">
-                          {group.title}
-                        </span>
-                      </div>
-
-                      <div>
-                        {group.endpoints.map(([method, path, description]) => (
-                          <div
-                            key={`${method}-${path}`}
-                            className="group flex items-center gap-4 border-b border-white/[0.04] px-5 py-4 last:border-0 hover:bg-white/[0.02]"
-                          >
-                            <MethodBadge method={method} />
-
-                            <code className="font-mono text-[10px] text-white/45">
-                              {path}
-                            </code>
-
-                            <span className="ml-auto hidden text-[10px] text-white/20 sm:block">
-                              {description}
-                            </span>
-
-                            <FiChevronRight className="size-3 text-white/10" />
-                          </div>
-                        ))}
-                      </div>
-                    </Card>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* WebSocket */}
-
-            <section className="mt-24 scroll-mt-28">
-              <div className="mb-7 flex items-center gap-3">
-                <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                  <FiWifi className="size-3.5 text-white/50" />
-                </div>
-
-                <h2 className="text-2xl font-semibold tracking-tight">
-                  Runner WebSocket
-                </h2>
-              </div>
-
-              <p className="text-sm leading-7 text-white/35">
-                Runners connect to the service over WebSocket. Authentication is
-                performed using the tenant runner API key.
-              </p>
-
-              <CodeBlock title="connection">
-                {`ws://localhost:3000/runner/ws
-
-Authorization:
-  apiKey: <tenant-api-key>`}
+              <CodeBlock label="Action">
+                {`{
+  "type": "screenshot"
+}`}
               </CodeBlock>
+            </section>
 
-              <div className="overflow-hidden rounded-xl border border-white/[0.08]">
-                <div className="grid grid-cols-2 border-b border-white/[0.06] bg-white/[0.025] px-5 py-3 font-mono text-[9px] uppercase tracking-wider text-white/20">
-                  <span>Runner → Service</span>
-                  <span>Service → Runner</span>
+            {/* Screenshots */}
+
+            <section id="screenshots" className="mt-24 scroll-mt-28">
+              <div className="mb-7 flex items-center gap-3">
+                <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
+                  <FiMonitor className="size-3.5 text-white/45" />
                 </div>
 
-                <div className="grid grid-cols-2 divide-x divide-white/[0.06]">
-                  <div className="space-y-1 p-5">
-                    {[
-                      "register",
-                      "heartbeat",
-                      "session_accepted",
-                      "session_rejected",
-                      "session_closed",
-                      "action_result",
-                    ].map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-md px-3 py-2 font-mono text-[10px] text-white/30 hover:bg-white/[0.025]"
-                      >
-                        {item}
-                      </div>
-                    ))}
-                  </div>
+                <h2 className="text-2xl font-semibold tracking-tight">
+                  Screenshots
+                </h2>
+              </div>
 
-                  <div className="space-y-1 p-5">
-                    {[
-                      "connected",
-                      "registered",
-                      "pong",
-                      "session_request",
-                      "action",
-                      "close_session",
-                    ].map((item) => (
-                      <div
-                        key={item}
-                        className="rounded-md px-3 py-2 font-mono text-[10px] text-white/30 hover:bg-white/[0.025]"
-                      >
-                        {item}
-                      </div>
-                    ))}
-                  </div>
+              <p className="text-sm leading-7 text-white/35">
+                Use screenshots to understand the current state of the machine
+                before or after performing an action.
+              </p>
+
+              <div className="mt-8 rounded-xl border border-white/[0.07] bg-white/[0.015] p-5">
+                <div className="flex items-center gap-3">
+                  <FiMonitor className="size-4 text-white/30" />
+
+                  <span className="font-mono text-[10px] text-white/40">
+                    screenshot
+                  </span>
                 </div>
+
+                <p className="mt-4 text-[11px] leading-5 text-white/25">
+                  Screenshots are returned as part of the action result and can
+                  be passed to your next workflow step.
+                </p>
               </div>
             </section>
 
             {/* n8n */}
 
-            <section className="mt-24 scroll-mt-28">
+            <section id="n8n" className="mt-24 scroll-mt-28">
               <div className="mb-7 flex items-center gap-3">
                 <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                  <FiCommand className="size-3.5 text-white/50" />
+                  <FiZap className="size-3.5 text-white/45" />
                 </div>
 
-                <h2 className="text-2xl font-semibold tracking-tight">
-                  n8n integration
-                </h2>
+                <h2 className="text-2xl font-semibold tracking-tight">n8n</h2>
               </div>
 
               <p className="text-sm leading-7 text-white/35">
-                Computer actions can be exposed as an n8n node, allowing AI
-                Agent workflows to discover runners, create sessions, and
-                execute actions on customer machines.
+                Use the n8n integration to give your workflows access to your
+                connected machines.
               </p>
 
               <div className="my-8 rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <div className="flex size-10 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                    <FiServer className="size-4 text-white/45" />
+                    <FiZap className="size-4 text-white/40" />
+                  </div>
+
+                  <FiArrowRight className="size-4 text-white/15" />
+
+                  <div className="rounded-lg border border-white/[0.08] bg-white/[0.025] px-4 py-2">
+                    <span className="font-mono text-[10px] text-white/35">
+                      Computer Action
+                    </span>
                   </div>
 
                   <FiArrowRight className="size-4 text-white/15" />
 
                   <div className="flex size-10 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                    <FiCommand className="size-4 text-white/45" />
-                  </div>
-
-                  <FiArrowRight className="size-4 text-white/15" />
-
-                  <div className="flex size-10 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                    <FiCpu className="size-4 text-white/45" />
+                    <FiCpu className="size-4 text-white/40" />
                   </div>
                 </div>
 
-                <div className="mt-5 flex items-center gap-3 font-mono text-[9px] text-white/20">
-                  <span>Actions Service</span>
-                  <span>→</span>
-                  <span>n8n Agent Tool</span>
-                  <span>→</span>
-                  <span>Customer Runner</span>
-                </div>
-              </div>
-
-              <CodeBlock title="n8n tool input">
-                {`{
-  "runnerId": "runner_8f3a2",
-  "action": {
-    "type": "screenshot"
-  }
-}`}
-              </CodeBlock>
-
-              <div className="rounded-xl border border-white/[0.07] bg-white/[0.015] p-5">
-                <div className="flex items-center gap-3">
-                  <FiCheck className="size-4 text-emerald-400/60" />
-
-                  <p className="text-xs text-white/55">
-                    The node only needs to understand the Actions Service API.
-                  </p>
-                </div>
-
-                <p className="mt-3 pl-7 text-[11px] leading-5 text-white/20">
-                  The underlying computer-use implementation remains inside your
-                  runner. This keeps the workflow layer independent from the
-                  machine-control implementation.
+                <p className="mt-5 text-[10px] leading-5 text-white/20">
+                  Your workflow → Computer Action → Connected machine
                 </p>
               </div>
+
+              <p className="text-[12px] leading-6 text-white/30">
+                This makes computer actions available alongside the other tools
+                in your n8n workflows and AI agents.
+              </p>
+
+              <Button
+                variant="outline"
+                className="mt-6 border-white/[0.08] bg-white/[0.02] text-xs text-white/45 hover:bg-white/[0.05] hover:text-white"
+              >
+                View n8n setup
+                <FiArrowRight className="ml-2 size-3" />
+              </Button>
+            </section>
+
+            {/* API */}
+
+            <section id="api" className="mt-24 scroll-mt-28">
+              <div className="mb-7 flex items-center gap-3">
+                <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
+                  <FiCode className="size-3.5 text-white/45" />
+                </div>
+
+                <h2 className="text-2xl font-semibold tracking-tight">API</h2>
+              </div>
+
+              <p className="text-sm leading-7 text-white/35">
+                The API lets you control runners and sessions from your own
+                applications and automation tools.
+              </p>
+
+              <div className="mt-8 space-y-2">
+                {[
+                  ["GET", "/api/runners", "View your runners"],
+                  ["POST", "/api/sessions", "Start a session"],
+                  ["POST", "/api/sessions/:id/actions", "Run an action"],
+                  ["DELETE", "/api/sessions/:id", "End a session"],
+                ].map(([method, path, description]) => (
+                  <div
+                    key={`${method}-${path}`}
+                    className="flex items-center gap-4 rounded-lg border border-white/[0.07] bg-white/[0.015] px-4 py-3.5"
+                  >
+                    <span className="w-10 font-mono text-[9px] text-emerald-400/50">
+                      {method}
+                    </span>
+
+                    <code className="font-mono text-[10px] text-white/40">
+                      {path}
+                    </code>
+
+                    <span className="ml-auto hidden text-[10px] text-white/20 sm:block">
+                      {description}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              <Button
+                variant="outline"
+                className="mt-6 border-white/[0.08] bg-white/[0.02] text-xs text-white/45 hover:bg-white/[0.05] hover:text-white"
+              >
+                Open API reference
+                <FiExternalLink className="ml-2 size-3" />
+              </Button>
             </section>
 
             {/* Security */}
 
-            <section className="mt-24 scroll-mt-28">
+            <section id="security" className="mt-24 scroll-mt-28">
               <div className="mb-7 flex items-center gap-3">
                 <div className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.025]">
-                  <FiShield className="size-3.5 text-white/50" />
+                  <FiShield className="size-3.5 text-white/45" />
                 </div>
 
                 <h2 className="text-2xl font-semibold tracking-tight">
-                  Security model
+                  Security
                 </h2>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <p className="text-sm leading-7 text-white/35">
+                Your machines remain under your control. The runner establishes
+                the connection and receives actions only through your workspace.
+              </p>
+
+              <div className="mt-8 space-y-3">
                 {[
-                  [
-                    FiUsers,
-                    "Tenant isolation",
-                    "Users can only see runners belonging to their tenant.",
-                  ],
-                  [
-                    FiKey,
-                    "Runner API keys",
-                    "Each tenant receives a dedicated credential for its runners.",
-                  ],
-                  [
-                    FiShield,
-                    "User JWT",
-                    "Application requests are authenticated using tenant-scoped JWTs.",
-                  ],
-                  [
-                    FiWifi,
-                    "Outbound runner connection",
-                    "Runners establish the connection to the service instead of exposing inbound ports.",
-                  ],
-                ].map(([icon, title, description]) => {
-                  const Icon = icon as typeof FiShield;
+                  {
+                    icon: FiKey,
+                    title: "API keys",
+                    description:
+                      "Use workspace credentials when connecting runners and applications.",
+                  },
+                  {
+                    icon: FiUsers,
+                    title: "Team access",
+                    description:
+                      "Control who can access your workspace and its connected runners.",
+                  },
+                  {
+                    icon: FiShield,
+                    title: "Runner isolation",
+                    description:
+                      "A runner belongs to your workspace and is not shared with other workspaces.",
+                  },
+                ].map((item) => (
+                  <div
+                    key={item.title}
+                    className="flex gap-4 rounded-xl border border-white/[0.07] bg-white/[0.015] p-5"
+                  >
+                    <item.icon className="mt-0.5 size-4 text-white/30" />
 
-                  return (
-                    <Card
-                      key={title as string}
-                      className="border-white/[0.07] bg-white/[0.015] p-5"
-                    >
-                      <Icon className="size-4 text-white/35" />
-
-                      <p className="mt-4 text-xs font-medium text-white/55">
-                        {title as string}
+                    <div>
+                      <p className="text-xs font-medium text-white/55">
+                        {item.title}
                       </p>
 
-                      <p className="mt-2 text-[11px] leading-5 text-white/20">
-                        {description as string}
+                      <p className="mt-1.5 text-[11px] leading-5 text-white/25">
+                        {item.description}
                       </p>
-                    </Card>
-                  );
-                })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
 
-            {/* Footer navigation */}
+            {/* Bottom navigation */}
 
             <div className="mt-24 flex items-center justify-between border-t border-white/[0.07] pt-8">
               <button className="group text-left">
@@ -1036,7 +980,7 @@ Authorization:
                 </p>
 
                 <p className="mt-2 text-xs text-white/30 group-hover:text-white/60">
-                  Introduction
+                  Documentation
                 </p>
               </button>
 
@@ -1051,8 +995,32 @@ Authorization:
                 </p>
               </button>
             </div>
+
+            {/* Footer */}
+
+            <footer className="mt-16 border-t border-white/[0.06] pt-8 pb-12">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-[10px] text-white/15">
+                  © 2026. All rights reserved.
+                </p>
+
+                <div className="flex gap-5 text-[10px] text-white/20">
+                  <a href="#" className="hover:text-white/50">
+                    Privacy
+                  </a>
+
+                  <a href="#" className="hover:text-white/50">
+                    Terms
+                  </a>
+
+                  <a href="#" className="hover:text-white/50">
+                    Support
+                  </a>
+                </div>
+              </div>
+            </footer>
           </div>
-        </div>
+        </article>
       </div>
     </main>
   );
