@@ -2,6 +2,7 @@
 //
 //  GET /api/runners          list all runners for my tenant
 //  GET /api/runners/:id      get a single runner
+//  GET /api/runners/live     get currently connected runner IDs (no auth for internal use)
 //
 // Runners are scoped to the tenant derived from the JWT – users can only
 // see runners that belong to their own organisation.
@@ -13,6 +14,13 @@ import type { RunnerHub } from '../ws/runnerHub';
 
 export function runnersRouter(hub: RunnerHub): Router {
   const router = Router();
+
+  // Get currently connected runner IDs (for internal service-to-service calls)
+  router.get('/connected', (_req, res) => {
+    const connectedIds = hub.getConnectedRunnerIds();
+    res.json({ connectedRunnerIds: connectedIds });
+  });
+
   router.use(authenticate);
 
   // List available runners for this tenant

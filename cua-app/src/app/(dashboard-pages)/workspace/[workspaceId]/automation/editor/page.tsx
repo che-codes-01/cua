@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams, useParams } from "next/navigation";
 import {
   FiArrowLeft,
   FiCheck,
@@ -263,7 +263,12 @@ type Runner = {
 
 export default function WorkflowEditorPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const params = useParams();
   const canvasRef = useRef<HTMLDivElement>(null);
+
+  const workflowId = searchParams.get("id");
+  const workspaceId = params.workspaceId as string;
 
   // Workflow state
   const [workflow, setWorkflow] = useState<Workflow>({
@@ -280,6 +285,8 @@ export default function WorkflowEditorPage() {
     published: false,
   });
 
+  const [isLoading, setIsLoading] = useState(!!workflowId);
+
   // UI state
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [showToolsMenu, setShowToolsMenu] = useState(false);
@@ -290,6 +297,7 @@ export default function WorkflowEditorPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+  const [loadingRunners, setLoadingRunners] = useState(false);
 
   // Dragging state
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
@@ -298,26 +306,40 @@ export default function WorkflowEditorPage() {
   const selectedNode = workflow.nodes.find((n) => n.id === selectedNodeId);
   const selectedTool = selectedNode ? TOOLS.find((t) => t.type === selectedNode.type) : null;
 
-  // Load runners
+  // Load existing workflow if editing
   useEffect(() => {
-    async function loadRunners() {
+    if (!workflowId) {
+      setIsLoading(false);
+      return;
+    }
+
+    async function loadWorkflow() {
       try {
-        const res = await fetch("/api/dashboard/workspaces");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.workspaces?.[0]?.id) {
-          const runnersRes = await fetch(`/api/onboarding/runners?workspaceId=${data.workspaces[0].id}`);
-          if (runnersRes.ok) {
-            const runnersData = await runnersRes.json();
-            setRunners(runnersData.runners || []);
+        const res = await fetch(`/api/workflows/get?id=${workflowId}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.workflow) {
+            setWorkflow({
+              id: data.workflow.id,
+              name: data.workflow.name,
+              nodes: data.workflow.nodes || [],
+              published: data.workflow.published,
+              webhookKey: data.workflow.webhook_key_hash ? "(hidden)" : undefined,
+              runnerId: data.workflow.runner_id,
+            });
+            if (data.workflow.runner_id) {
+              setSelectedRunnerId(data.workflow.runner_id);
+            }
           }
         }
       } catch (e) {
         console.error(e);
+      } finally {
+        setIsLoading(false);
       }
     }
-    loadRunners();
-  }, []);
+    loadWorkflow();
+  }, [workflowId]);
 
   // Handle canvas click to add node
   function handleCanvasClick(e: React.MouseEvent) {
@@ -384,6 +406,16 @@ export default function WorkflowEditorPage() {
     }));
   }
 
+  // Update node name
+  function updateNodeName(nodeId: string, name: string) {
+    setWorkflow((prev) => ({
+      ...prev,
+      nodes: prev.nodes.map((n) =>
+        n.id === nodeId ? { ...n, name: name || undefined } : n
+      ),
+    }));
+  }
+
   // Delete node
   function deleteNode(nodeId: string) {
     // Don't delete the trigger
@@ -438,6 +470,27 @@ export default function WorkflowEditorPage() {
     setDraggingNodeId(null);
   }
 
+  // Open publish modal and fetch live runners
+  async function openPublishModal() {
+    setShowPublishModal(true);
+    setLoadingRunners(true);
+    
+    try {
+      if (workspaceId) {
+        // Fetch live connected runners
+        const res = await fetch(`/api/runners/live?workspaceId=${workspaceId}`);
+        if (res.ok) {
+          const data = await res.json();
+          setRunners(data.runners || []);
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch runners:", e);
+    } finally {
+      setLoadingRunners(false);
+    }
+  }
+
   // Publish workflow
   async function publishWorkflow() {
     if (!selectedRunnerId) return;
@@ -478,7 +531,7 @@ export default function WorkflowEditorPage() {
       await fetch("/api/workflows/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workflow }),
+        body: JSON.stringify({ workflow, workspaceId }),
       });
     } catch (e) {
       console.error(e);
@@ -497,13 +550,21 @@ export default function WorkflowEditorPage() {
 
   const webhookUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/api/workflows/trigger/${workflow.id}`;
 
+  if (isLoading) {
+    return (
+      <main className="flex h-screen items-center justify-center bg-[#0a0a0a] text-white">
+        <div className="text-white/30">Loading workflow...</div>
+      </main>
+    );
+  }
+
   return (
     <main className="flex h-screen flex-col bg-[#0a0a0a] text-white">
       {/* Header */}
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => router.push("/dashboard")}
+            onClick={() => router.push(`/workspace/${workspaceId}/automation`)}}
             className="flex items-center gap-2 text-white/40 hover:text-white"
           >
             <FiArrowLeft className="size-4" />
@@ -533,7 +594,7 @@ export default function WorkflowEditorPage() {
             {isSaving ? "Saving..." : "Save"}
           </Button>
           <Button
-            onClick={() => setShowPublishModal(true)}
+            onClick={openPublishModal}
             className="h-8 bg-emerald-500 px-4 text-xs text-white hover:bg-emerald-600"
           >
             <FiGlobe className="mr-2 size-3.5" />
@@ -826,7 +887,7 @@ export default function WorkflowEditorPage() {
                     <div>
                       <p className="text-[10px] text-white/40">Webhook Key (Header: x-webhook-key)</p>
                       <code className="mt-1 block rounded bg-black/30 px-2 py-1.5 font-mono text-[10px] text-white/60">
-                        {workflow.webhookKey}
+                        {workflow.webhookKey || "(Key shown only once after publishing)"}
                       </code>
                     </div>
 
@@ -839,23 +900,37 @@ export default function WorkflowEditorPage() {
                   </div>
                 </div>
 
-                <div className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
-                  <p className="mb-2 text-[10px] font-medium text-white/50">Example cURL</p>
-                  <code className="block whitespace-pre-wrap break-all rounded bg-black/30 p-2 font-mono text-[9px] text-white/50">
+                {workflow.webhookKey && workflow.webhookKey !== "(hidden)" && (
+                  <div className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+                    <p className="mb-2 text-[10px] font-medium text-white/50">Example cURL</p>
+                    <code className="block whitespace-pre-wrap break-all rounded bg-black/30 p-2 font-mono text-[9px] text-white/50">
 {`curl -X POST \\
   ${webhookUrl} \\
   -H "x-webhook-key: ${workflow.webhookKey}" \\
   -H "Content-Type: application/json" \\
   -d '{}'`}
-                  </code>
-                </div>
+                    </code>
+                  </div>
+                )}
 
-                <Button
-                  onClick={() => setShowPublishModal(false)}
-                  className="mt-4 h-10 w-full bg-white text-sm text-black hover:bg-white/90"
-                >
-                  Done
-                </Button>
+                <div className="mt-4 flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      // Allow republishing - reset published state temporarily
+                      setWorkflow((prev) => ({ ...prev, published: false }));
+                    }}
+                    className="h-10 flex-1 border-white/[0.08] text-sm text-white/50 hover:bg-white/[0.04] hover:text-white"
+                  >
+                    Republish
+                  </Button>
+                  <Button
+                    onClick={() => setShowPublishModal(false)}
+                    className="h-10 flex-1 bg-white text-sm text-black hover:bg-white/90"
+                  >
+                    Done
+                  </Button>
+                </div>
               </div>
             ) : (
               <div className="mt-6">
@@ -865,32 +940,29 @@ export default function WorkflowEditorPage() {
                     Select Runner
                   </label>
                   <div className="space-y-2">
-                    {runners.length > 0 ? (
-                      runners.map((runner) => (
+                    {loadingRunners ? (
+                      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 text-center">
+                        <p className="text-xs text-white/30">Loading runners...</p>
+                      </div>
+                    ) : runners.filter(r => r.status === "online").length > 0 ? (
+                      runners.filter(r => r.status === "online").map((runner) => (
                         <button
                           key={runner.id}
                           onClick={() => setSelectedRunnerId(runner.id)}
-                          disabled={runner.status !== "online"}
                           className={`flex w-full items-center justify-between rounded-lg border p-3 text-left transition ${
                             selectedRunnerId === runner.id
                               ? "border-emerald-500/50 bg-emerald-500/10"
-                              : runner.status === "online"
-                              ? "border-white/[0.06] bg-white/[0.02] hover:border-white/10"
-                              : "cursor-not-allowed border-white/[0.04] bg-white/[0.01] opacity-50"
+                              : "border-white/[0.06] bg-white/[0.02] hover:border-white/10"
                           }`}
                         >
                           <div className="flex items-center gap-3">
                             <div className="relative">
                               <FiCpu className="size-4 text-white/40" />
-                              <span
-                                className={`absolute -right-0.5 -top-0.5 size-2 rounded-full ${
-                                  runner.status === "online" ? "bg-emerald-400" : "bg-white/20"
-                                }`}
-                              />
+                              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-emerald-400" />
                             </div>
                             <div>
                               <p className="text-xs text-white/70">{runner.name}</p>
-                              <p className="text-[10px] text-white/30">{runner.status}</p>
+                              <p className="text-[10px] text-emerald-400/60">Connected</p>
                             </div>
                           </div>
                           {selectedRunnerId === runner.id && (
@@ -901,9 +973,9 @@ export default function WorkflowEditorPage() {
                     ) : (
                       <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 text-center">
                         <FiCpu className="mx-auto size-6 text-white/20" />
-                        <p className="mt-2 text-xs text-white/30">No runners available</p>
+                        <p className="mt-2 text-xs text-white/30">No runners connected</p>
                         <p className="mt-1 text-[10px] text-white/20">
-                          Connect a runner first to publish workflows
+                          Start a runner to publish this workflow
                         </p>
                       </div>
                     )}

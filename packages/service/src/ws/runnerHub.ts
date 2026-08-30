@@ -236,6 +236,17 @@ export class RunnerHub {
     return undefined;
   }
 
+  /** Get all currently connected runner IDs */
+  getConnectedRunnerIds(): string[] {
+    const connected: string[] = [];
+    for (const [runnerId, ws] of this.connections.entries()) {
+      if (ws.readyState === WebSocket.OPEN) {
+        connected.push(runnerId);
+      }
+    }
+    return connected;
+  }
+
   /** Send an action to a runner and wait for the result (used by workflow execution) */
   sendAction(runnerId: string, action: unknown): Promise<unknown> {
     const ws = this.connections.get(runnerId);

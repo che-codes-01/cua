@@ -360,11 +360,12 @@ export default function DashboardPage() {
 
               <Button
                 variant="outline"
-                onClick={() => router.push("/automation/editor")}
-                className="h-9 border-white/[0.08] bg-white/[0.02] px-3 text-[10px] text-white/40 hover:bg-white/[0.05] hover:text-white"
+                onClick={() => selectedWorkspace && router.push(`/workspace/${selectedWorkspace.id}/automation`)}
+                disabled={!selectedWorkspace}
+                className="h-9 border-white/[0.08] bg-white/[0.02] px-3 text-[10px] text-white/40 hover:bg-white/[0.05] hover:text-white disabled:opacity-50"
               >
                 <FiZap className="mr-2 size-3" />
-                Automation
+                Workflows
               </Button>
 
               <Button
