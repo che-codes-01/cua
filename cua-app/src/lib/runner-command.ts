@@ -7,10 +7,10 @@ export function buildRunnerCommand(apiKey: string, workspaceId: string): string 
     throw new Error("NEXT_PUBLIC_RUNNER_CONNECTOR_URL not configured");
   }
 
-  return `RUNNER_API_KEY="${apiKey}" \\
-RUNNER_SERVICE_URL="${serviceUrl}" \\
+  return `COMPUTER_ACTIONS_SERVICE_URL="${serviceUrl}" \\
+COMPUTER_ACTIONS_SERVICE_API_KEY="${apiKey}" \\
 RUNNER_NAME="my-machine" \\
-npm install -g github:che-codes-01/cua#packages/runner && cua-runner start`;
+npm install -g github:che-codes-01/cua-runner && cua-runner start`;
 }
 
 export function buildRunnerDockerCommand(
@@ -25,11 +25,11 @@ export function buildRunnerDockerCommand(
   }
 
   return `docker run -d \\
-  -e RUNNER_API_KEY="${apiKey}" \\
-  -e RUNNER_SERVICE_URL="${serviceUrl}" \\
+  -e COMPUTER_ACTIONS_SERVICE_URL="${serviceUrl}" \\
+  -e COMPUTER_ACTIONS_SERVICE_API_KEY="${apiKey}" \\
   -e RUNNER_NAME="${name}" \\
   -e RUNNER_LABELS="docker" \\
-  node:20-alpine npm install -g github:che-codes-01/cua#packages/runner && cua-runner start`;
+  node:20-alpine npm install -g github:che-codes-01/cua-runner && cua-runner start`;
 }
 
 export function buildRunnerDockerComposeConfig(
@@ -49,10 +49,10 @@ services:
   ${name}:
     image: node:20-alpine
     environment:
-      RUNNER_API_KEY: ${apiKey}
-      RUNNER_SERVICE_URL: ${serviceUrl}
+      COMPUTER_ACTIONS_SERVICE_URL: ${serviceUrl}
+      COMPUTER_ACTIONS_SERVICE_API_KEY: ${apiKey}
       RUNNER_NAME: ${name}
       RUNNER_LABELS: docker
-    command: sh -c "npm install -g github:che-codes-01/cua#packages/runner && cua-runner start"
+    command: sh -c "npm install -g github:che-codes-01/cua-runner && cua-runner start"
     restart: unless-stopped`;
 }
