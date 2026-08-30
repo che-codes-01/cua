@@ -505,6 +505,7 @@ export default function WorkflowEditorPage() {
             ...workflow,
             runnerId: selectedRunnerId,
           },
+          workspaceId,
         }),
       });
 
@@ -526,13 +527,26 @@ export default function WorkflowEditorPage() {
 
   // Save workflow
   async function saveWorkflow() {
+    if (!workspaceId) {
+      console.error("No workspaceId available");
+      return;
+    }
+    
     setIsSaving(true);
     try {
-      await fetch("/api/workflows/save", {
+      console.log("Saving workflow with workspaceId:", workspaceId);
+      const res = await fetch("/api/workflows/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ workflow, workspaceId }),
       });
+      
+      if (res.ok) {
+        // Update URL to include workflow ID if not already there
+        if (!workflowId) {
+          router.replace(`/workspace/${workspaceId}/automation/editor?id=${workflow.id}`);
+        }
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -564,7 +578,7 @@ export default function WorkflowEditorPage() {
       <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => router.push(`/workspace/${workspaceId}/automation`)}}
+            onClick={() => router.push(`/workspace/${workspaceId}/automation`)}
             className="flex items-center gap-2 text-white/40 hover:text-white"
           >
             <FiArrowLeft className="size-4" />

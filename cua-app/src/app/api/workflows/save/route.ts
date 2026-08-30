@@ -16,6 +16,8 @@ export async function POST(request: NextRequest) {
 
     const { workflow, workspaceId: providedWorkspaceId } = await request.json();
 
+    console.log("[workflows/save] Received:", { workflowId: workflow?.id, providedWorkspaceId });
+
     if (!workflow || !workflow.id) {
       return NextResponse.json(
         { error: "Invalid workflow data" },
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Upsert the workflow (without publishing)
+    console.log("[workflows/save] Using workspaceId:", workspaceId);
     const { error } = await supabase.from("workflows").upsert({
       id: workflow.id,
       workspace_id: workspaceId,

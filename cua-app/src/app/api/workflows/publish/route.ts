@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { workflow } = await request.json();
+    const { workflow, workspaceId: providedWorkspaceId } = await request.json();
 
     if (!workflow || !workflow.id || !workflow.runnerId) {
       return NextResponse.json(
@@ -31,21 +31,24 @@ export async function POST(request: NextRequest) {
       .update(webhookKey)
       .digest("hex");
 
-    // Get the workspace for this user
-    const { data: workspaces } = await supabase
-      .from("workspaces")
-      .select("id")
-      .eq("owner_id", user.id)
-      .limit(1);
+    // Use provided workspaceId or get the first workspace for this user
+    let workspaceId = providedWorkspaceId;
+    
+    if (!workspaceId) {
+      const { data: workspaces } = await supabase
+        .from("workspaces")
+        .select("id")
+        .eq("owner_id", user.id)
+        .limit(1);
 
-    if (!workspaces || workspaces.length === 0) {
-      return NextResponse.json(
-        { error: "No workspace found" },
-        { status: 404 }
-      );
+      if (!workspaces || workspaces.length === 0) {
+        return NextResponse.json(
+          { error: "No workspace found" },
+          { status: 404 }
+        );
+      }
+      workspaceId = workspaces[0].id;
     }
-
-    const workspaceId = workspaces[0].id;
 
     // Upsert the workflow
     const { error } = await supabase.from("workflows").upsert({
