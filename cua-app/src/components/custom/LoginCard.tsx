@@ -1,3 +1,4 @@
+import GitHubSignInButton from "../GitHubSignInButton";
 import {
   Card,
   CardContent,
@@ -5,7 +6,6 @@ import {
   CardHeader,
   CardTitle,
 } from "../ui/card";
-import GitHubSignInButton from "./GitHubSignInButton";
 
 function LoginCard({
   loginWithGithubText = "Login with GitHub",
