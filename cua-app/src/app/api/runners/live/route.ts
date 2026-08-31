@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get actually connected runners from the service
-    const serviceUrl = process.env.SERVICE_URL || "http://localhost:3001";
+    const serviceUrl = process.env.SERVICE_URL || "https://cua-service.vercel.app";
     let connectedIds: string[] = [];
 
     try {

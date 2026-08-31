@@ -104,7 +104,7 @@ export async function POST(
     // For now, we'll return the execution info
     // In production, you'd send this to the service which forwards to the runner
 
-    const serviceUrl = process.env.SERVICE_URL || "http://localhost:3001";
+    const serviceUrl = process.env.SERVICE_URL || "https://cua-service.vercel.app";
     
     try {
       // Call the service to execute the workflow
