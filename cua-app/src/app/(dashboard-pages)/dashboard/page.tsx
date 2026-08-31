@@ -1420,6 +1420,13 @@ function AddRunnerModal({
           </code>
         </div>
 
+        <div className="mt-3 rounded-lg border border-white/[0.07] bg-black/40 p-4">
+          <div className="text-[10px] text-white/40 mb-2">Your API key prefix:</div>
+          <code className="block font-mono text-[11px] text-white/60 break-all">
+            {apiKey}
+          </code>
+        </div>
+
         <p className="mt-3 text-[10px] text-white/40">
           Note: The API key shown is a prefix. Get your full API key from the{" "}
           <span className="font-semibold text-white/50">Runner Keys</span> section.
