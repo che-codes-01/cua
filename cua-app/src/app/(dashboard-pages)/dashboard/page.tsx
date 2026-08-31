@@ -1381,9 +1381,10 @@ function AddRunnerModal({
   onClose: () => void;
 }) {
   const [copied, setCopied] = useState(false);
-  const apiKey = runnerKeys[0]?.key_prefix || "YOUR_API_KEY";
+  const apiKeyPrefix = runnerKeys[0]?.key_prefix || "YOUR_API_KEY";
+  const apiKey = `${apiKeyPrefix}***********`;
 
-  const command = `npx cua-runner --service-url ${process.env.NEXT_PUBLIC_SERVICE_URL || "wss://cua-service.vercel.app"} --api-key ${apiKey}`;
+  const command = `npx cua-runner --service-url ${process.env.NEXT_PUBLIC_SERVICE_URL || "wss://cua-service.vercel.app"} --api-key ${apiKeyPrefix}`;
 
   async function copyCommand() {
     await navigator.clipboard.writeText(command);
@@ -1418,6 +1419,11 @@ function AddRunnerModal({
             {command}
           </code>
         </div>
+
+        <p className="mt-3 text-[10px] text-white/40">
+          Note: The API key shown is a prefix. Get your full API key from the{" "}
+          <span className="font-semibold text-white/50">Runner Keys</span> section.
+        </p>
 
         <div className="mt-4 flex gap-3">
           <Button
