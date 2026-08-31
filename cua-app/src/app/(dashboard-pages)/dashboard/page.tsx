@@ -78,6 +78,11 @@ export default function DashboardPage() {
   const [showWorkspaceSwitcher, setShowWorkspaceSwitcher] = useState(false);
   const [showAddRunnerModal, setShowAddRunnerModal] = useState(false);
   const [showRunnerMenu, setShowRunnerMenu] = useState<string | null>(null);
+  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
+  const [revokingKeyId, setRevokingKeyId] = useState<string | null>(null);
+  const [showRotatedKeyModal, setShowRotatedKeyModal] = useState<{ keyName: string; newKey: string } | null>(null);
+  const [showCreateKeyModal, setShowCreateKeyModal] = useState(false);
+  const [creatingKey, setCreatingKey] = useState(false);
 
   // Load workspaces on mount
   useEffect(() => {
@@ -162,6 +167,136 @@ export default function DashboardPage() {
     } else {
       setCopiedWorkspaceId(true);
       setTimeout(() => setCopiedWorkspaceId(false), 2000);
+    }
+  }
+
+  async function handleRevokeKey(keyId: string) {
+    if (!selectedWorkspace) return;
+    
+    if (!confirm("Are you sure you want to revoke this API key? This action cannot be undone and any runners using this key will stop working.")) {
+      return;
+    }
+
+    setRevokingKeyId(keyId);
+
+    try {
+      const res = await fetch("/api/dashboard/runner-keys/revoke", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyId,
+          workspaceId: selectedWorkspace.id,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        alert(data.error || "Failed to revoke key");
+        return;
+      }
+
+      // Remove the key from the local state
+      setRunnerKeys((keys) => keys.filter((k) => k.id !== keyId));
+    } catch (error) {
+      console.error("Error revoking key:", error);
+      alert("Failed to revoke key");
+    } finally {
+      setRevokingKeyId(null);
+    }
+  }
+
+  async function handleRotateKey(keyId: string) {
+    if (!selectedWorkspace) return;
+
+    if (!confirm("Are you sure you want to rotate this API key? The current key will stop working immediately and you'll need to update your runners with the new key.")) {
+      return;
+    }
+
+    setRotatingKeyId(keyId);
+
+    try {
+      const res = await fetch("/api/dashboard/runner-keys/rotate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyId,
+          workspaceId: selectedWorkspace.id,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Failed to rotate key");
+        return;
+      }
+
+      // Update the key in local state
+      setRunnerKeys((keys) =>
+        keys.map((k) =>
+          k.id === keyId
+            ? { ...k, key_prefix: data.key.key_prefix }
+            : k
+        )
+      );
+
+      // Show the new key in a modal (only shown once)
+      setShowRotatedKeyModal({
+        keyName: data.key.name,
+        newKey: data.key.newKey,
+      });
+    } catch (error) {
+      console.error("Error rotating key:", error);
+      alert("Failed to rotate key");
+    } finally {
+      setRotatingKeyId(null);
+    }
+  }
+
+  async function handleCreateKey(name: string) {
+    if (!selectedWorkspace) return;
+
+    setCreatingKey(true);
+
+    try {
+      const res = await fetch("/api/dashboard/runner-keys/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workspaceId: selectedWorkspace.id,
+          name,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Failed to create key");
+        return;
+      }
+
+      // Add the new key to local state
+      setRunnerKeys((keys) => [
+        {
+          id: data.key.id,
+          name: data.key.name,
+          key_prefix: data.key.key_prefix,
+          created_at: data.key.created_at,
+        },
+        ...keys,
+      ]);
+
+      // Close create modal and show the new key
+      setShowCreateKeyModal(false);
+      setShowRotatedKeyModal({
+        keyName: data.key.name,
+        newKey: data.key.newKey,
+      });
+    } catch (error) {
+      console.error("Error creating key:", error);
+      alert("Failed to create key");
+    } finally {
+      setCreatingKey(false);
     }
   }
 
@@ -411,6 +546,12 @@ export default function DashboardPage() {
                 runnerKeys={runnerKeys}
                 copiedKeyId={copiedKeyId}
                 copyToClipboard={copyToClipboard}
+                selectedWorkspace={selectedWorkspace}
+                onRevokeKey={handleRevokeKey}
+                onRotateKey={handleRotateKey}
+                rotatingKeyId={rotatingKeyId}
+                revokingKeyId={revokingKeyId}
+                onCreateKey={() => setShowCreateKeyModal(true)}
               />
             )}
 
@@ -431,6 +572,24 @@ export default function DashboardPage() {
           workspace={selectedWorkspace}
           runnerKeys={runnerKeys}
           onClose={() => setShowAddRunnerModal(false)}
+        />
+      )}
+
+      {/* Rotated Key Modal */}
+      {showRotatedKeyModal && (
+        <RotatedKeyModal
+          keyName={showRotatedKeyModal.keyName}
+          newKey={showRotatedKeyModal.newKey}
+          onClose={() => setShowRotatedKeyModal(null)}
+        />
+      )}
+
+      {/* Create Key Modal */}
+      {showCreateKeyModal && (
+        <CreateKeyModal
+          onClose={() => setShowCreateKeyModal(false)}
+          onCreateKey={handleCreateKey}
+          isCreating={creatingKey}
         />
       )}
 
@@ -775,10 +934,22 @@ function ApiKeysSection({
   runnerKeys,
   copiedKeyId,
   copyToClipboard,
+  selectedWorkspace,
+  onRevokeKey,
+  onRotateKey,
+  rotatingKeyId,
+  revokingKeyId,
+  onCreateKey,
 }: {
   runnerKeys: RunnerKey[];
   copiedKeyId: string | null;
   copyToClipboard: (text: string, keyId?: string) => void;
+  selectedWorkspace: Workspace | null;
+  onRevokeKey: (keyId: string) => void;
+  onRotateKey: (keyId: string) => void;
+  rotatingKeyId: string | null;
+  revokingKeyId: string | null;
+  onCreateKey: () => void;
 }) {
   return (
     <>
@@ -791,7 +962,10 @@ function ApiKeysSection({
             Authentication credentials for runners
           </p>
         </div>
-        <Button className="h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90">
+        <Button
+          onClick={onCreateKey}
+          className="h-9 bg-white px-4 text-[10px] text-black hover:bg-white/90"
+        >
           <FiPlus className="mr-2 size-3.5" />
           Create key
         </Button>
@@ -806,6 +980,10 @@ function ApiKeysSection({
               copied={copiedKeyId === key.id}
               onCopy={() => copyToClipboard(key.key_prefix, key.id)}
               expanded
+              onRevoke={() => onRevokeKey(key.id)}
+              onRotate={() => onRotateKey(key.id)}
+              isRotating={rotatingKeyId === key.id}
+              isRevoking={revokingKeyId === key.id}
             />
           ))}
         </div>
@@ -1095,11 +1273,19 @@ function RunnerKeyCard({
   copied,
   onCopy,
   expanded = false,
+  onRevoke,
+  onRotate,
+  isRotating = false,
+  isRevoking = false,
 }: {
   runnerKey: RunnerKey;
   copied: boolean;
   onCopy: () => void;
   expanded?: boolean;
+  onRevoke?: () => void;
+  onRotate?: () => void;
+  isRotating?: boolean;
+  isRevoking?: boolean;
 }) {
   return (
     <div className="border-b border-white/[0.06] p-5 last:border-0">
@@ -1138,12 +1324,24 @@ function RunnerKeyCard({
             Used by runners to authenticate with this workspace.
           </p>
           <div className="mt-5 flex gap-2">
-            <button className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/[0.07] py-2.5 text-[10px] text-white/35 transition hover:bg-white/[0.04] hover:text-white">
-              <FiRefreshCw className="size-3" />
-              Rotate key
+            <button
+              onClick={onRotate}
+              disabled={isRotating || isRevoking}
+              className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-white/[0.07] py-2.5 text-[10px] text-white/35 transition hover:bg-white/[0.04] hover:text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <FiRefreshCw className={`size-3 ${isRotating ? "animate-spin" : ""}`} />
+              {isRotating ? "Rotating..." : "Rotate key"}
             </button>
-            <button className="flex items-center justify-center rounded-lg border border-red-400/[0.08] px-3 text-red-400/40 transition hover:bg-red-400/[0.04] hover:text-red-400/70">
-              <FiTrash2 className="size-3" />
+            <button
+              onClick={onRevoke}
+              disabled={isRotating || isRevoking}
+              className="flex items-center justify-center rounded-lg border border-red-400/[0.08] px-3 text-red-400/40 transition hover:bg-red-400/[0.04] hover:text-red-400/70 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isRevoking ? (
+                <FiRefreshCw className="size-3 animate-spin" />
+              ) : (
+                <FiTrash2 className="size-3" />
+              )}
             </button>
           </div>
         </>
@@ -1245,6 +1443,181 @@ function AddRunnerModal({
         <p className="mt-4 text-[10px] text-white/20">
           Make sure you have Node.js installed. The runner will automatically
           connect to your workspace.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function RotatedKeyModal({
+  keyName,
+  newKey,
+  onClose,
+}: {
+  keyName: string;
+  newKey: string;
+  onClose: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyKey() {
+    await navigator.clipboard.writeText(newKey);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="relative w-full max-w-lg mx-4 rounded-xl border border-white/[0.07] bg-[#0a0a0a] p-6 shadow-2xl">
+        <button
+          onClick={onClose}
+          className="absolute right-4 top-4 text-white/30 hover:text-white"
+        >
+          <FiX className="size-5" />
+        </button>
+
+        <div className="flex size-11 items-center justify-center rounded-xl border border-emerald-400/20 bg-emerald-400/[0.08]">
+          <FiCheck className="size-5 text-emerald-400" />
+        </div>
+
+        <h2 className="mt-6 text-xl font-semibold tracking-[-0.03em] text-white">
+          Key rotated successfully
+        </h2>
+
+        <p className="mt-2 text-sm text-white/30">
+          Your API key <span className="text-white/50">&quot;{keyName}&quot;</span> has been rotated. 
+          Copy and save the new key below — it won&apos;t be shown again.
+        </p>
+
+        <div className="mt-6 rounded-lg border border-yellow-400/20 bg-yellow-400/[0.04] p-3">
+          <div className="flex items-center gap-2 text-[10px] text-yellow-400/80">
+            <svg className="size-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            This key will only be displayed once. Store it securely.
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-white/[0.07] bg-black/40 p-4">
+          <code className="block whitespace-pre-wrap break-all font-mono text-[11px] text-white/60 select-all">
+            {newKey}
+          </code>
+        </div>
+
+        <div className="mt-4 flex gap-3">
+          <Button
+            onClick={copyKey}
+            className="flex-1 h-10 bg-white text-xs text-black hover:bg-white/90"
+          >
+            {copied ? (
+              <FiCheck className="mr-2 size-3.5" />
+            ) : (
+              <FiCopy className="mr-2 size-3.5" />
+            )}
+            {copied ? "Copied!" : "Copy new key"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            className="h-10 border-white/[0.08] px-4 text-xs text-white/50 hover:bg-white/[0.05] hover:text-white"
+          >
+            Close
+          </Button>
+        </div>
+
+        <p className="mt-4 text-[10px] text-white/20">
+          Update your runners with this new key. Any runners using the old key will stop working.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function CreateKeyModal({
+  onClose,
+  onCreateKey,
+  isCreating,
+}: {
+  onClose: () => void;
+  onCreateKey: (name: string) => void;
+  isCreating: boolean;
+}) {
+  const [keyName, setKeyName] = useState("");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (keyName.trim()) {
+      onCreateKey(keyName.trim());
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+      <div className="relative w-full max-w-md mx-4 rounded-xl border border-white/[0.07] bg-[#0a0a0a] p-6 shadow-2xl">
+        <button
+          onClick={onClose}
+          disabled={isCreating}
+          className="absolute right-4 top-4 text-white/30 hover:text-white disabled:opacity-50"
+        >
+          <FiX className="size-5" />
+        </button>
+
+        <div className="flex size-11 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.025]">
+          <FiKey className="size-5 text-white/50" />
+        </div>
+
+        <h2 className="mt-6 text-xl font-semibold tracking-[-0.03em] text-white">
+          Create API Key
+        </h2>
+
+        <p className="mt-2 text-sm text-white/30">
+          Create a new API key for runner authentication.
+        </p>
+
+        <form onSubmit={handleSubmit} className="mt-6">
+          <div>
+            <label htmlFor="keyName" className="block text-[10px] text-white/30 mb-2">
+              Key Name
+            </label>
+            <input
+              id="keyName"
+              type="text"
+              value={keyName}
+              onChange={(e) => setKeyName(e.target.value)}
+              placeholder="e.g., Production, Staging, Dev"
+              disabled={isCreating}
+              className="w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2.5 text-sm text-white/70 outline-none placeholder:text-white/20 focus:border-white/20 disabled:opacity-50"
+              autoFocus
+            />
+          </div>
+
+          <div className="mt-6 flex gap-3">
+            <Button
+              type="submit"
+              disabled={!keyName.trim() || isCreating}
+              className="flex-1 h-10 bg-white text-xs text-black hover:bg-white/90 disabled:opacity-50"
+            >
+              {isCreating ? (
+                <FiRefreshCw className="mr-2 size-3.5 animate-spin" />
+              ) : (
+                <FiPlus className="mr-2 size-3.5" />
+              )}
+              {isCreating ? "Creating..." : "Create key"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onClose}
+              disabled={isCreating}
+              className="h-10 border-white/[0.08] px-4 text-xs text-white/50 hover:bg-white/[0.05] hover:text-white disabled:opacity-50"
+            >
+              Cancel
+            </Button>
+          </div>
+        </form>
+
+        <p className="mt-4 text-[10px] text-white/20">
+          The key will only be shown once after creation. Make sure to copy it.
         </p>
       </div>
     </div>
