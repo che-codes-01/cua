@@ -139,7 +139,7 @@ export default function DashboardPage() {
 
     try {
       const [runnersRes, keysRes] = await Promise.all([
-        fetch(`/api/onboarding/runners?workspaceId=${selectedWorkspace.id}`),
+        fetch(`/api/runners/live?workspaceId=${selectedWorkspace.id}`),
         fetch(`/api/dashboard/runner-keys?workspaceId=${selectedWorkspace.id}`),
       ]);
 
