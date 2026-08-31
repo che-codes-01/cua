@@ -1384,7 +1384,7 @@ function AddRunnerModal({
   const apiKeyPrefix = runnerKeys[0]?.key_prefix || "YOUR_API_KEY";
   const apiKey = `${apiKeyPrefix}***********`;
 
-  const command = `npx cua-runner --service-url ${process.env.NEXT_PUBLIC_SERVICE_URL || "wss://cua-service.vercel.app"} --api-key ${apiKey}`;
+  const command = `npx github:che-codes-01/cua#packages/runner --service-url ${process.env.NEXT_PUBLIC_SERVICE_URL || "wss://cua-service.vercel.app"} --api-key ${apiKeyPrefix}`;
 
   async function copyCommand() {
     await navigator.clipboard.writeText(command);
