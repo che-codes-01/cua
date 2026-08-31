@@ -172,7 +172,7 @@ export default function DashboardPage() {
 
   async function handleRevokeKey(keyId: string) {
     if (!selectedWorkspace) return;
-    
+
     if (!confirm("Are you sure you want to revoke this API key? This action cannot be undone and any runners using this key will stop working.")) {
       return;
     }
@@ -1384,7 +1384,7 @@ function AddRunnerModal({
   const apiKeyPrefix = runnerKeys[0]?.key_prefix || "YOUR_API_KEY";
   const apiKey = `${apiKeyPrefix}***********`;
 
-  const command = `npx cua-runner --service-url ${process.env.NEXT_PUBLIC_SERVICE_URL || "wss://cua-service.vercel.app"} --api-key ${apiKeyPrefix}`;
+  const command = `npx cua-runner --service-url ${process.env.NEXT_PUBLIC_SERVICE_URL || "wss://cua-service.vercel.app"} --api-key ${apiKey}`;
 
   async function copyCommand() {
     await navigator.clipboard.writeText(command);
@@ -1491,7 +1491,7 @@ function RotatedKeyModal({
         </h2>
 
         <p className="mt-2 text-sm text-white/30">
-          Your API key <span className="text-white/50">&quot;{keyName}&quot;</span> has been rotated. 
+          Your API key <span className="text-white/50">&quot;{keyName}&quot;</span> has been rotated.
           Copy and save the new key below — it won&apos;t be shown again.
         </p>
 
