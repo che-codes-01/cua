@@ -6,8 +6,11 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "postinstall": "npm rebuild lightningcss --build-from-source || true"
+    "lint": "eslint"
+  },
+  "optionalDependencies": {
+    "lightningcss-linux-x64-gnu": "1.32.0",
+    "@tailwindcss/oxide-linux-x64-gnu": "^4"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

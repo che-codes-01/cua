@@ -1,3 +1,0 @@
-{
-  "buildCommand": "npm rebuild lightningcss && npm run build"
-}
