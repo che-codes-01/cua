@@ -399,27 +399,27 @@ export default function DocsPage() {
                 {[
                   {
                     number: "01",
-                    title: "Install runner CLI",
+                    title: "Get API key",
                     description:
-                      "npm install -g github:che-codes-01/cua#packages/runner",
+                      "Go to workspace settings to generate your API key",
                   },
                   {
                     number: "02",
-                    title: "Create API key in onboarding",
+                    title: "Run runner",
                     description:
-                      "Go to workspace onboarding to generate your API key",
+                      "npx --yes github:che-codes-01/cua-runner --service-url <url> --api-key <key>",
                   },
                   {
                     number: "03",
-                    title: "Set environment variables",
+                    title: "Machine appears online",
                     description:
-                      "Export RUNNER_API_KEY, RUNNER_SERVICE_URL, RUNNER_NAME",
+                      "Your runner connects automatically and shows in your workspace",
                   },
                   {
                     number: "04",
-                    title: "Start runner",
+                    title: "Start executing actions",
                     description:
-                      "cua-runner start — machine appears online in seconds",
+                      "Use sessions to control your machine remotely",
                   },
                 ].map((step) => (
                   <div
@@ -462,15 +462,15 @@ export default function DocsPage() {
               </p>
 
               <h3 className="mt-10 text-sm font-medium text-white/60">
-                1. Install the runner
+                1. Run the runner
               </h3>
 
               <p className="mt-2 text-[12px] leading-6 text-white/30">
-                Install globally via npm:
+                Execute this command on your machine:
               </p>
 
-              <CodeBlock label="Install">
-                {`npm install -g github:che-codes-01/cua#packages/runner`}
+              <CodeBlock label="Run">
+                {`npx --yes github:che-codes-01/cua-runner --service-url https://cua-service.vercel.app --api-key YOUR_API_KEY`}
               </CodeBlock>
 
               <h3 className="mt-8 text-sm font-medium text-white/60">
@@ -482,44 +482,6 @@ export default function DocsPage() {
               </p>
 
               <h3 className="mt-8 text-sm font-medium text-white/60">
-                3. Configure environment
-              </h3>
-
-              <p className="mt-2 text-[12px] leading-6 text-white/30">
-                Create a <code>.env</code> file or export these variables:
-              </p>
-
-              <CodeBlock label=".env or terminal export">
-                {`RUNNER_API_KEY=cak_live_XXXX...
-RUNNER_SERVICE_URL=https://your-app-domain.com
-RUNNER_NAME=my-machine
-RUNNER_LABELS=production,linux`}
-              </CodeBlock>
-
-              <p className="mt-4 text-[12px] leading-6 text-white/30">
-                Replace <code>RUNNER_API_KEY</code> with your actual key and <code>RUNNER_SERVICE_URL</code> with your app URL.
-              </p>
-
-              <h3 className="mt-8 text-sm font-medium text-white/60">
-                4. Start the runner
-              </h3>
-
-              <CodeBlock label="Terminal">
-                {`cua-runner start`}
-              </CodeBlock>
-
-              <p className="mt-4 text-[12px] leading-6 text-white/30">
-                Or with inline environment variables:
-              </p>
-
-              <CodeBlock label="Terminal with env">
-                {`RUNNER_API_KEY="cak_live_..." \\
-RUNNER_SERVICE_URL="https://your-domain.com" \\
-RUNNER_NAME="my-machine" \\
-cua-runner start`}
-              </CodeBlock>
-
-              <h3 className="mt-8 text-sm font-medium text-white/60">
                 Docker
               </h3>
 
@@ -529,11 +491,10 @@ cua-runner start`}
 
               <CodeBlock label="docker run">
                 {`docker run -d \\
-  -e RUNNER_API_KEY="cak_live_..." \\
-  -e RUNNER_SERVICE_URL="https://your-domain.com" \\
+  -e COMPUTER_ACTIONS_SERVICE_URL="https://cua-service.vercel.app" \\
+  -e COMPUTER_ACTIONS_SERVICE_API_KEY="cak_live_..." \\
   -e RUNNER_NAME="docker-runner" \\
-  -e RUNNER_LABELS="docker" \\
-  node:20-alpine npx -g github:che-codes-01/cua#packages/runner`}
+  node:20-alpine npx --yes github:che-codes-01/cua-runner --service-url https://cua-service.vercel.app --api-key cak_live_...`}
               </CodeBlock>
 
               <h3 className="mt-8 text-sm font-medium text-white/60">
@@ -551,11 +512,10 @@ services:
   runner:
     image: node:20-alpine
     environment:
-      RUNNER_API_KEY: cak_live_XXXX...
-      RUNNER_SERVICE_URL: https://your-domain.com
+      COMPUTER_ACTIONS_SERVICE_URL: https://cua-service.vercel.app
+      COMPUTER_ACTIONS_SERVICE_API_KEY: cak_live_XXXX...
       RUNNER_NAME: compose-runner
-      RUNNER_LABELS: docker,production
-    command: npx -g github:che-codes-01/cua#packages/runner
+    command: npx --yes github:che-codes-01/cua-runner --service-url https://cua-service.vercel.app --api-key cak_live_XXXX...
     restart: unless-stopped`}
               </CodeBlock>
 

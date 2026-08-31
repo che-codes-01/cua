@@ -5,5 +5,11 @@
   "workspaces": [
     "packages/*",
     "cua-app"
-  ]
+  ],
+  "scripts": {
+    "runner:build": "npm run build -w packages/runner",
+    "runner:start": "npm start -w packages/runner",
+    "runner:dev": "npm run dev -w packages/runner",
+    "push-runner": "bash ./push-runner.sh"
+  }
 }
