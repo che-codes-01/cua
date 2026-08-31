@@ -1,18 +1,9 @@
 import { config } from "@/config";
 
 export function buildRunnerCommand(apiKey: string, workspaceId: string): string {
-  const serviceUrl = config.nextPublicRunnerConnectorUrl;
+  const serviceUrl = config.nextPublicRunnerConnectorUrl || "https://cua-service.vercel.app";
 
-  if (!serviceUrl) {
-    throw new Error("NEXT_PUBLIC_RUNNER_CONNECTOR_URL not configured");
-  }
-
-  return `npm install -g github:che-codes-01/cua-runner && \\
-COMPUTER_ACTIONS_SERVICE_URL="${serviceUrl}" \\
-COMPUTER_ACTIONS_SERVICE_API_KEY="${apiKey}" \\
-RUNNER_NAME="my-machine" \\
-cua-runner start`;
-}
+  return `npx --yes github:che-codes-01/cua-runner --service-url ${serviceUrl} --api-key ${apiKey}`;
 
 export function buildRunnerDockerCommand(
   apiKey: string,
