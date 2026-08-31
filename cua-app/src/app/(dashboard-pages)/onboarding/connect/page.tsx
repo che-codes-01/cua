@@ -91,7 +91,7 @@ export default function ConnectRunnerPage() {
     async function checkRunner() {
       try {
         const response = await fetch(
-          `/api/onboarding/runners?workspaceId=${workspace.id}`,
+          `/api/onboarding/runners?workspaceId=${workspace!.id}`,
           {
             cache: "no-store",
           },
