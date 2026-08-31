@@ -4,6 +4,7 @@ export function buildRunnerCommand(apiKey: string, workspaceId: string): string 
   const serviceUrl = config.nextPublicRunnerConnectorUrl || "https://cua-service.vercel.app";
 
   return `npx --yes github:che-codes-01/cua-runner --service-url ${serviceUrl} --api-key ${apiKey}`;
+}
 
 export function buildRunnerDockerCommand(
   apiKey: string,
