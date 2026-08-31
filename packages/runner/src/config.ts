@@ -10,9 +10,13 @@ function requireEnv(name: string, value: string | undefined): string {
   return value;
 }
 
+function optionalEnv(name: string, value: string | undefined, defaultValue: string): string {
+  return value || defaultValue;
+}
+
 export const config = {
   /** WebSocket URL of the Computer Actions Service (http → ws, https → wss automatically) */
-  serviceUrl:  requireEnv('COMPUTER_ACTIONS_SERVICE_URL', process.env.COMPUTER_ACTIONS_SERVICE_URL)
+  serviceUrl:  optionalEnv('COMPUTER_ACTIONS_SERVICE_URL', process.env.COMPUTER_ACTIONS_SERVICE_URL, 'https://cua-service.vercel.app')
                  .replace(/\/+$/, '')                 // strip trailing slashes
                  .replace(/^https/, 'wss')            // https → wss
                  .replace(/^http(?!s)/, 'ws'),        // http  → ws  (not https)
