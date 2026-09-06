@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
+import { buildRunnerCommand } from "@/lib/runner-command";
 import {
   FiArrowLeft, FiCheck, FiCheckCircle, FiCopy, FiGlobe, FiCpu, FiLock,
   FiMonitor, FiMousePointer, FiPlay, FiPlus, FiSave, FiShield, FiTrash2,
@@ -122,6 +123,7 @@ export default function WorkflowEditorPage() {
   const [showPublish,  setShowPublish]  = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
   const [runners,      setRunners]      = useState<Runner[]>([]);
+  const [runnerApiKey, setRunnerApiKey] = useState<string>("");
   const [runnerId,     setRunnerId]     = useState<string | null>(null);
   const [isSaving,     setIsSaving]     = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -322,8 +324,13 @@ export default function WorkflowEditorPage() {
 
   async function openPublish() {
     setShowPublish(true);
-    const res = await fetch(`/api/runners/live?workspaceId=${workspaceId}`).then(r => r.json()).catch(() => ({ runners: [] }));
-    setRunners(res.runners ?? []);
+    const [runnersRes, keysRes] = await Promise.all([
+      fetch(`/api/runners/live?workspaceId=${workspaceId}`).then(r => r.json()).catch(() => ({ runners: [] })),
+      fetch(`/api/dashboard/runner-keys?workspaceId=${workspaceId}`).then(r => r.json()).catch(() => ({ keys: [] })),
+    ]);
+    setRunners(runnersRes.runners ?? []);
+    const firstKey = keysRes.keys?.[0]?.key ?? keysRes.keys?.[0]?.raw_key ?? "";
+    setRunnerApiKey(firstKey);
   }
   async function publishWorkflow() {
     const target = runnerId ?? workflow.runnerId;
@@ -718,6 +725,7 @@ export default function WorkflowEditorPage() {
         <PublishModal
           workflow={workflow} runners={runners} runnerId={runnerId ?? workflow.runnerId ?? null}
           isPublishing={isPublishing} copiedHook={copiedHook} webhookUrl={webhookUrl}
+          runnerApiKey={runnerApiKey} workspaceId={workspaceId}
           onSelectRunner={setRunnerId}
           onPublish={publishWorkflow}
           onCopy={async () => { await navigator.clipboard.writeText(webhookUrl); setCopiedHook(true); setTimeout(() => setCopiedHook(false), 2000); }}
@@ -923,12 +931,15 @@ function NodeConfigDialog({ node, tool, onClose, onUpdate, onRename, onDelete }:
 }
 
 // ─── PublishModal ─────────────────────────────────────────────────────────────
-function PublishModal({ workflow, runners, runnerId, isPublishing, copiedHook, webhookUrl, onSelectRunner, onPublish, onCopy, onRepublish, onUnpublish, onClose }: {
+function PublishModal({ workflow, runners, runnerId, isPublishing, copiedHook, webhookUrl, runnerApiKey, workspaceId, onSelectRunner, onPublish, onCopy, onRepublish, onUnpublish, onClose }: {
   workflow: Workflow; runners: Runner[]; runnerId: string | null;
   isPublishing: boolean; copiedHook: boolean; webhookUrl: string;
+  runnerApiKey: string; workspaceId: string;
   onSelectRunner: (id: string) => void; onPublish: () => void;
   onCopy: () => void; onRepublish: () => void; onUnpublish: () => void; onClose: () => void;
 }) {
+  const [cmdCopied, setCmdCopied] = useState(false);
+  const runnerCmd = buildRunnerCommand(runnerApiKey || "<YOUR_RUNNER_KEY>", workspaceId);
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
       onClick={onClose}>
@@ -964,15 +975,28 @@ function PublishModal({ workflow, runners, runnerId, isPublishing, copiedHook, w
               )}
             </div>
 
-            {/* Vercel deployment-protection notice */}
-            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
-              <p className="text-[10px] text-blue-300/80 leading-relaxed">
-                <strong>Vercel preview deployments</strong> have SSO protection enabled by default.
-                To call the webhook from external tools you must also pass the bypass token set in
-                your Vercel project as the{" "}
-                <code className="rounded bg-black/20 px-1">x-vercel-protection-bypass</code> header.{" "}
-                <span className="text-white/30">Vercel Dashboard → Settings → Deployment Protection → Protection Bypass Secret.</span>
-              </p>
+            {/* Runner command */}
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] text-white/40 flex items-center gap-1.5">
+                  <FiCpu className="size-3" /> Add a runner on any machine
+                </p>
+                <button
+                  onClick={async () => { await navigator.clipboard.writeText(runnerCmd); setCmdCopied(true); setTimeout(() => setCmdCopied(false), 2000); }}
+                  className="flex items-center gap-1 rounded bg-white/[0.06] px-2 py-1 text-[9px] text-white/40 hover:text-white transition-colors"
+                >
+                  {cmdCopied ? <FiCheck className="size-3 text-emerald-400" /> : <FiCopy className="size-3" />}
+                  {cmdCopied ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <code className="block rounded bg-black/40 px-2.5 py-2 font-mono text-[9px] text-white/50 leading-relaxed break-all">
+                {runnerCmd}
+              </code>
+              {!runnerApiKey && (
+                <p className="mt-1.5 text-[9px] text-white/25">
+                  Get your API key from Dashboard → Runner Keys
+                </p>
+              )}
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={onRepublish} className="flex-1 h-9 border-white/[0.08] text-sm text-white/40 hover:text-white hover:bg-white/[0.04]">Republish</Button>
