@@ -963,6 +963,17 @@ function PublishModal({ workflow, runners, runnerId, isPublishing, copiedHook, w
                 </>
               )}
             </div>
+
+            {/* Vercel deployment-protection notice */}
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2.5">
+              <p className="text-[10px] text-blue-300/80 leading-relaxed">
+                <strong>Vercel preview deployments</strong> have SSO protection enabled by default.
+                To call the webhook from external tools you must also pass the bypass token set in
+                your Vercel project as the{" "}
+                <code className="rounded bg-black/20 px-1">x-vercel-protection-bypass</code> header.{" "}
+                <span className="text-white/30">Vercel Dashboard → Settings → Deployment Protection → Protection Bypass Secret.</span>
+              </p>
+            </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={onRepublish} className="flex-1 h-9 border-white/[0.08] text-sm text-white/40 hover:text-white hover:bg-white/[0.04]">Republish</Button>
               <Button variant="outline" onClick={onUnpublish} className="flex-1 h-9 border-red-500/20 text-sm text-red-400/60 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/40">Unpublish</Button>
