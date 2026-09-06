@@ -115,7 +115,8 @@ export default function WorkflowEditorPage() {
   });
   const [nodeOutputs,  setNodeOutputs]  = useState<Record<string, NodeOutput>>({});
   const [runningId,    setRunningId]    = useState<string | null>(null);
-  const [selectedId,   setSelectedId]   = useState<string | null>(null);
+  // multi-select
+  const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set());
   const [configId,     setConfigId]     = useState<string | null>(null);
   const [addMenu,      setAddMenu]      = useState<{ afterId: string; x: number; y: number; search: string } | null>(null);
   const [showPublish,  setShowPublish]  = useState(false);
@@ -126,16 +127,22 @@ export default function WorkflowEditorPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [copiedHook,   setCopiedHook]   = useState(false);
   const [isLoading,    setIsLoading]    = useState(!!workflowId);
-  // canvas zoom (Ctrl/Cmd + wheel, or +/- buttons)
+  // canvas zoom
   const [zoom,         setZoom]         = useState(1);
   const MIN_ZOOM = 0.3, MAX_ZOOM = 2, ZOOM_STEP = 0.1;
   function applyZoom(delta: number) {
     setZoom(z => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((z + delta) * 10) / 10)));
   }
-  // drag — dragOrigin tracks mousedown position for the threshold check
-  const [dragging,     setDragging]     = useState<{ id: string; ox: number; oy: number } | null>(null);
-  const [dragOrigin,   setDragOrigin]   = useState<{ id: string; cx: number; cy: number } | null>(null);
-  const DRAG_THRESHOLD = 5; // px before drag activates
+  // drag — delta-based so multi-node drag works correctly
+  const [dragging, setDragging] = useState<{
+    ids: string[];                                 // all nodes being moved
+    startMX: number; startMY: number;              // mouse pos at drag start (viewport)
+    origins: Record<string, { x: number; y: number }>; // node positions at drag start
+  } | null>(null);
+  const [dragCandidate, setDragCandidate] = useState<{ id: string; mx: number; my: number } | null>(null);
+  const DRAG_THRESHOLD = 5;
+  // marquee rubber-band selection
+  const [marquee, setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const [selectedConn, setSelectedConn] = useState<number | null>(null); // index into nodes.slice(1)
 
   // load workflow
@@ -157,23 +164,50 @@ export default function WorkflowEditorPage() {
       if (!inInput) {
         if (e.key === "Delete" || e.key === "Backspace") {
           if (selectedConn !== null) {
-            // delete the node that the selected connection leads INTO
             const target = workflow.nodes[selectedConn + 1];
             if (target) deleteNode(target.id);
             setSelectedConn(null);
-          } else if (selectedId) {
-            deleteNode(selectedId);
+          } else {
+            workflow.nodes
+              .filter(n => selectedIds.has(n.id) && n.type !== "webhook_trigger")
+              .forEach(n => deleteNode(n.id));
           }
         }
-        if (e.key === "Escape") { setSelectedId(null); setConfigId(null); setAddMenu(null); setShowShortcuts(false); setSelectedConn(null); }
+        if (e.key === "Escape") {
+          setSelectedIds(new Set()); setConfigId(null); setAddMenu(null);
+          setShowShortcuts(false); setSelectedConn(null);
+        }
         if (e.key === "n" || e.key === "N") {
           e.preventDefault();
           const lastNode = workflow.nodes[workflow.nodes.length - 1];
-          const rect = canvasRef.current?.getBoundingClientRect();
-          const cx = rect ? rect.width  / 2 - 104 : 300;
-          const cy = rect ? rect.height / 2 - 150 : 200;
-          setAddMenu({ afterId: lastNode.id, x: cx, y: cy, search: "" });
+          setAddMenu({ afterId: lastNode.id, x: 0, y: 0, search: "" });
         }
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+        e.preventDefault();
+        setSelectedIds(new Set(workflow.nodes.filter(n => n.type !== "webhook_trigger").map(n => n.id)));
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
+        const toCopy = workflow.nodes.filter(n => selectedIds.has(n.id));
+        if (!toCopy.length) return;
+        const payload = JSON.stringify({ __cua_nodes__: true, nodes: toCopy.map(({ id: _id, ...rest }) => rest) });
+        navigator.clipboard.writeText(payload).catch(() => {});
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "v" && !inInput) {
+        e.preventDefault();
+        navigator.clipboard.readText().then(text => {
+          try {
+            const data = JSON.parse(text);
+            if (!data.__cua_nodes__ || !Array.isArray(data.nodes)) return;
+            const offset = 40;
+            const pasted: WFNode[] = data.nodes.map((n: Omit<WFNode,"id">) => ({
+              ...n, id: crypto.randomUUID(),
+              position: { x: (n.position?.x ?? 100) + offset, y: (n.position?.y ?? 100) + offset },
+            }));
+            setWorkflow(w => ({ ...w, nodes: [...w.nodes, ...pasted] }));
+            setSelectedIds(new Set(pasted.map(n => n.id)));
+          } catch { /* not cua JSON */ }
+        }).catch(() => {});
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); testRun(); }
@@ -185,7 +219,7 @@ export default function WorkflowEditorPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId, workflow]);
+  }, [selectedIds, selectedConn, workflow]);
 
   // ── handlers ───────────────────────────────────────────────────────────────
   function addNodeAfter(toolType: string, afterId: string) {
@@ -197,7 +231,7 @@ export default function WorkflowEditorPage() {
     const prev = workflow.nodes[idx];
     const newNode: WFNode = { id: crypto.randomUUID(), type: toolType, position: { x: prev.position.x + 290, y: prev.position.y }, params: defaults };
     setWorkflow(w => ({ ...w, nodes: [...w.nodes.slice(0, idx+1), newNode, ...w.nodes.slice(idx+1)] }));
-    setSelectedId(newNode.id);
+    setSelectedIds(new Set([newNode.id]));
     setConfigId(newNode.id);
     setAddMenu(null);
   }
@@ -212,8 +246,32 @@ export default function WorkflowEditorPage() {
     const node = workflow.nodes.find(n => n.id === id);
     if (!node || node.type === "webhook_trigger") return;
     setWorkflow(w => ({ ...w, nodes: w.nodes.filter(n => n.id !== id) }));
-    if (selectedId === id) setSelectedId(null);
-    if (configId  === id) setConfigId(null);
+    setSelectedIds(prev => { const s = new Set(prev); s.delete(id); return s; });
+    if (configId === id) setConfigId(null);
+  }
+
+  function exportWorkflow() {
+    const json = JSON.stringify({ __cua_nodes__: true, nodes: workflow.nodes.map(({ id: _id, ...rest }) => rest) }, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = `${workflow.name.replace(/\s+/g, "-")}.json`; a.click();
+  }
+  function importFromClipboard() {
+    navigator.clipboard.readText().then(text => {
+      try {
+        const data = JSON.parse(text);
+        const nodes: Omit<WFNode,"id">[] = data.__cua_nodes__ ? data.nodes : data;
+        if (!Array.isArray(nodes)) return;
+        const imported: WFNode[] = nodes.map((n: Omit<WFNode,"id">) => ({ ...n, id: crypto.randomUUID() }));
+        const hasTrigger = imported.some(n => n.type === "webhook_trigger");
+        if (hasTrigger) {
+          setWorkflow(w => ({ ...w, nodes: imported }));
+        } else {
+          setWorkflow(w => ({ ...w, nodes: [...w.nodes, ...imported] }));
+        }
+        setSelectedIds(new Set(imported.map(n => n.id)));
+      } catch { alert("Clipboard does not contain valid workflow JSON"); }
+    }).catch(() => alert("Could not read clipboard"));
   }
 
   async function save() {
@@ -264,47 +322,80 @@ export default function WorkflowEditorPage() {
     } catch(e) { console.error(e); } finally { setIsPublishing(false); }
   }
 
-  // drag
+  // ── drag (multi-node delta-based) ──────────────────────────────────────────
   function onNodeMouseDown(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    setSelectedId(id);
-    // Record where the mousedown happened; actual drag starts only after threshold
-    setDragOrigin({ id, cx: e.clientX, cy: e.clientY });
+    if (e.shiftKey) {
+      setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+    } else {
+      if (!selectedIds.has(id)) setSelectedIds(new Set([id]));
+    }
+    setDragCandidate({ id, mx: e.clientX, my: e.clientY });
+  }
+  function onCanvasMouseDown(e: React.MouseEvent) {
+    if ((e.target as HTMLElement).closest("[data-node]")) return;
+    if (!e.shiftKey) setSelectedIds(new Set());
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const cx = (e.clientX - rect.left) / zoom;
+    const cy = (e.clientY - rect.top)  / zoom;
+    setMarquee({ sx: cx, sy: cy, ex: cx, ey: cy });
   }
   function onCanvasMouseMove(e: React.MouseEvent) {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
-    // Activate drag once cursor moves past threshold
-    if (dragOrigin && !dragging) {
-      const dx = Math.abs(e.clientX - dragOrigin.cx);
-      const dy = Math.abs(e.clientY - dragOrigin.cy);
+    // Activate drag once past threshold
+    if (dragCandidate && !dragging) {
+      const dx = Math.abs(e.clientX - dragCandidate.mx);
+      const dy = Math.abs(e.clientY - dragCandidate.my);
       if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
-        const node = workflow.nodes.find(n => n.id === dragOrigin.id);
-        if (node) {
-          // ox/oy = cursor offset from node's top-left, both in canvas-relative coords
-          setDragging({
-            id:  dragOrigin.id,
-            ox: dragOrigin.cx - rect.left - node.position.x,
-            oy: dragOrigin.cy - rect.top  - node.position.y,
-          });
-        }
+        const ids = selectedIds.has(dragCandidate.id) ? Array.from(selectedIds) : [dragCandidate.id];
+        const origins: Record<string, { x: number; y: number }> = {};
+        workflow.nodes.forEach(n => { if (ids.includes(n.id)) origins[n.id] = { ...n.position }; });
+        setDragging({ ids, startMX: dragCandidate.mx, startMY: dragCandidate.my, origins });
       }
     }
 
-    if (!dragging) return;
-    setWorkflow(w => ({
-      ...w,
-      nodes: w.nodes.map(n => n.id === dragging.id ? {
-        ...n,
-        position: {
-          x: Math.max(0, e.clientX - rect.left - dragging.ox),
-          y: Math.max(0, e.clientY - rect.top  - dragging.oy),
-        },
-      } : n),
-    }));
+    if (dragging) {
+      const dx = (e.clientX - dragging.startMX) / zoom;
+      const dy = (e.clientY - dragging.startMY) / zoom;
+      setWorkflow(w => ({
+        ...w, nodes: w.nodes.map(n => {
+          if (!dragging.ids.includes(n.id)) return n;
+          const o = dragging.origins[n.id];
+          return { ...n, position: { x: Math.max(0, o.x + dx), y: Math.max(0, o.y + dy) } };
+        }),
+      }));
+    }
+
+    // Marquee
+    if (marquee) {
+      const cx = (e.clientX - rect.left) / zoom;
+      const cy = (e.clientY - rect.top)  / zoom;
+      setMarquee(m => m ? { ...m, ex: cx, ey: cy } : null);
+    }
   }
-  function onCanvasMouseUp() { setDragging(null); setDragOrigin(null); }
+  function onCanvasMouseUp(e: React.MouseEvent) {
+    setDragging(null); setDragCandidate(null);
+    if (marquee) {
+      const mx1 = Math.min(marquee.sx, marquee.ex), mx2 = Math.max(marquee.sx, marquee.ex);
+      const my1 = Math.min(marquee.sy, marquee.ey), my2 = Math.max(marquee.sy, marquee.ey);
+      if (mx2 - mx1 > 5 || my2 - my1 > 5) {
+        const hit = workflow.nodes.filter(n =>
+          n.type !== "webhook_trigger" &&
+          n.position.x < mx2 && n.position.x + NODE_W > mx1 &&
+          n.position.y < my2 && n.position.y + NODE_H * 2 > my1
+        );
+        setSelectedIds(prev => {
+          const s = e.shiftKey ? new Set(prev) : new Set<string>();
+          hit.forEach(n => s.add(n.id));
+          return s;
+        });
+      }
+      setMarquee(null);
+    }
+  }
 
   const webhookUrl = typeof window !== "undefined" ? `${window.location.origin}/api/workflows/trigger/${workflow.id}` : "";
   const configNode = workflow.nodes.find(n => n.id === configId);
@@ -329,6 +420,12 @@ export default function WorkflowEditorPage() {
           <Button variant="outline" onClick={save} disabled={isSaving} className="h-8 border-white/[0.08] px-3 text-xs text-white/40 hover:text-white hover:bg-white/[0.04]">
             <FiSave className="mr-1.5 size-3" />{isSaving ? "Saving…" : "Save"}
           </Button>
+          <Button variant="outline" onClick={exportWorkflow} title="Export workflow JSON" className="h-8 border-white/[0.08] px-3 text-xs text-white/40 hover:text-white hover:bg-white/[0.04]">
+            Export
+          </Button>
+          <Button variant="outline" onClick={importFromClipboard} title="Import from clipboard (paste workflow JSON)" className="h-8 border-white/[0.08] px-3 text-xs text-white/40 hover:text-white hover:bg-white/[0.04]">
+            Import
+          </Button>
           <Button onClick={testRun} disabled={!!runningId} className="h-8 bg-white/[0.08] hover:bg-white/[0.12] border border-white/[0.1] px-3 text-xs text-white/70">
             <FiPlay className="mr-1.5 size-3" />{runningId ? "Running…" : "Test Run"}
           </Button>
@@ -350,10 +447,11 @@ export default function WorkflowEditorPage() {
         ref={canvasRef}
         className="relative flex-1 overflow-hidden bg-[#080808] select-none"
         style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: `${24 * zoom}px ${24 * zoom}px` }}
-        onClick={() => { setSelectedId(null); setAddMenu(null); setSelectedConn(null); }}
+        onClick={() => { setSelectedIds(new Set()); setAddMenu(null); setSelectedConn(null); }}
+        onMouseDown={onCanvasMouseDown}
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
-        onMouseLeave={onCanvasMouseUp}
+        onMouseLeave={e => { setDragging(null); setDragCandidate(null); setMarquee(null); }}
         onWheel={e => {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
@@ -386,7 +484,7 @@ export default function WorkflowEditorPage() {
                   d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
                   fill="none" stroke="transparent" strokeWidth="12"
                   style={{ pointerEvents: "stroke", cursor: "pointer" }}
-                  onClick={e => { e.stopPropagation(); setSelectedConn(isSel ? null : i); setSelectedId(null); }}
+                  onClick={e => { e.stopPropagation(); setSelectedConn(isSel ? null : i); setSelectedIds(new Set()); }}
                 />
                 {/* Visible path */}
                 <path
@@ -409,14 +507,20 @@ export default function WorkflowEditorPage() {
           if (!tool) return null;
           const output   = nodeOutputs[node.id];
           const running  = runningId === node.id;
-          const selected = selectedId === node.id;
+          const selected = selectedIds.has(node.id);
           return (
             <NodeCard
               key={node.id}
               node={node} tool={tool}
               selected={selected} running={running} output={output ?? null}
-              onSelect={() => setSelectedId(node.id)}
-              onOpen={() => { setSelectedId(node.id); setConfigId(node.id); }}
+              onSelect={(e) => {
+                if (e.shiftKey) {
+                  setSelectedIds(prev => { const s = new Set(prev); s.has(node.id) ? s.delete(node.id) : s.add(node.id); return s; });
+                } else {
+                  setSelectedIds(new Set([node.id]));
+                }
+              }}
+              onOpen={() => { setSelectedIds(new Set([node.id])); setConfigId(node.id); }}
               onMouseDown={e => onNodeMouseDown(e, node.id)}
               onAdd={(x, y) => setAddMenu({ afterId: node.id, x, y, search: "" })}
             />
@@ -432,6 +536,18 @@ export default function WorkflowEditorPage() {
           </div>
         )}
         </div>{/* /zoomable layer */}
+
+        {/* Marquee selection rectangle */}
+        {marquee && (() => {
+          const x = Math.min(marquee.sx, marquee.ex) * zoom;
+          const y = Math.min(marquee.sy, marquee.ey) * zoom;
+          const w = Math.abs(marquee.ex - marquee.sx) * zoom;
+          const h = Math.abs(marquee.ey - marquee.sy) * zoom;
+          return (
+            <div className="pointer-events-none absolute z-20 rounded border border-blue-400/60 bg-blue-400/10"
+              style={{ left: x, top: y, width: w, height: h }} />
+          );
+        })()}
 
         {/* Zoom controls */}
         <div className="absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-white/[0.08] bg-[#111]/90 px-2 py-1 backdrop-blur-sm">
@@ -532,7 +648,7 @@ export default function WorkflowEditorPage() {
 // ─── NodeCard ─────────────────────────────────────────────────────────────────
 function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onMouseDown, onAdd }: {
   node: WFNode; tool: ToolDef; selected: boolean; running: boolean; output: NodeOutput | null;
-  onSelect: () => void; onOpen: () => void; onMouseDown: (e: React.MouseEvent) => void;
+  onSelect: (e: React.MouseEvent) => void; onOpen: () => void; onMouseDown: (e: React.MouseEvent) => void;
   onAdd: (x: number, y: number) => void;
 }) {
   const isAssert = tool.category === "assert";
@@ -540,8 +656,9 @@ function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onM
   return (
     <div
       className="absolute group"
+      data-node="true"
       style={{ left: node.position.x, top: node.position.y, width: NODE_W }}
-      onClick={e => { e.stopPropagation(); onSelect(); }}
+      onClick={e => { e.stopPropagation(); onSelect(e); }}
       onDoubleClick={e => { e.stopPropagation(); onOpen(); }}
       onMouseDown={onMouseDown}
     >
@@ -627,10 +744,24 @@ function NodeConfigDialog({ node, tool, onClose, onUpdate, onRename, onDelete }:
   onClose: () => void; onUpdate: (p: Record<string, unknown>) => void;
   onRename: (name: string) => void; onDelete: () => void;
 }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Auto-focus first input when dialog opens
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const first = dialogRef.current?.querySelector<HTMLElement>('input:not([type="hidden"]), textarea, select');
+      first?.focus();
+    }, 60);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={onClose}>
-      <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] shadow-2xl overflow-hidden"
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+      onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}
+    >
+      <div ref={dialogRef} className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
