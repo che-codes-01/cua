@@ -221,7 +221,6 @@ export default function WorkflowEditorPage() {
         }).catch(() => {});
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
-      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); testRun(); }
       if (e.key === "?" && !inInput) { e.preventDefault(); setShowShortcuts(s => !s); }
       if ((e.metaKey || e.ctrlKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); applyZoom(ZOOM_STEP); }
       if ((e.metaKey || e.ctrlKey) && e.key === "-") { e.preventDefault(); applyZoom(-ZOOM_STEP); }
@@ -335,6 +334,16 @@ export default function WorkflowEditorPage() {
       const data = await res.json();
       if (res.ok) setWorkflow(w => ({ ...w, published: true, webhookKey: data.webhookKey, runnerId: target }));
     } catch(e) { console.error(e); } finally { setIsPublishing(false); }
+  }
+
+  async function unpublishWorkflow() {
+    try {
+      const res = await fetch("/api/workflows/unpublish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflowId: workflow.id }) });
+      if (res.ok) {
+        setWorkflow(w => ({ ...w, published: false, webhookKey: undefined }));
+        setShowPublish(false);
+      }
+    } catch(e) { console.error(e); }
   }
 
   // ── drag (multi-node delta-based) ──────────────────────────────────────────
@@ -481,9 +490,6 @@ export default function WorkflowEditorPage() {
           </Button>
           <Button variant="outline" onClick={importFromClipboard} title="Import from clipboard (paste workflow JSON)" className="h-8 border-white/[0.08] px-3 text-xs text-white/40 hover:text-white hover:bg-white/[0.04]">
             Import
-          </Button>
-          <Button onClick={testRun} disabled={!!runningId} className="h-8 bg-white/[0.08] hover:bg-white/[0.12] border border-white/[0.1] px-3 text-xs text-white/70">
-            <FiPlay className="mr-1.5 size-3" />{runningId ? "Running…" : "Test Run"}
           </Button>
           <Button onClick={openPublish} className="h-8 bg-emerald-500 hover:bg-emerald-600 px-3 text-xs text-white">
             <FiGlobe className="mr-1.5 size-3" />Publish
@@ -716,6 +722,7 @@ export default function WorkflowEditorPage() {
           onPublish={publishWorkflow}
           onCopy={async () => { await navigator.clipboard.writeText(webhookUrl); setCopiedHook(true); setTimeout(() => setCopiedHook(false), 2000); }}
           onRepublish={() => setWorkflow(w => ({ ...w, published: false }))}
+          onUnpublish={unpublishWorkflow}
           onClose={() => setShowPublish(false)}
         />
       )}
@@ -916,11 +923,11 @@ function NodeConfigDialog({ node, tool, onClose, onUpdate, onRename, onDelete }:
 }
 
 // ─── PublishModal ─────────────────────────────────────────────────────────────
-function PublishModal({ workflow, runners, runnerId, isPublishing, copiedHook, webhookUrl, onSelectRunner, onPublish, onCopy, onRepublish, onClose }: {
+function PublishModal({ workflow, runners, runnerId, isPublishing, copiedHook, webhookUrl, onSelectRunner, onPublish, onCopy, onRepublish, onUnpublish, onClose }: {
   workflow: Workflow; runners: Runner[]; runnerId: string | null;
   isPublishing: boolean; copiedHook: boolean; webhookUrl: string;
   onSelectRunner: (id: string) => void; onPublish: () => void;
-  onCopy: () => void; onRepublish: () => void; onClose: () => void;
+  onCopy: () => void; onRepublish: () => void; onUnpublish: () => void; onClose: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
@@ -958,6 +965,7 @@ function PublishModal({ workflow, runners, runnerId, isPublishing, copiedHook, w
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={onRepublish} className="flex-1 h-9 border-white/[0.08] text-sm text-white/40 hover:text-white hover:bg-white/[0.04]">Republish</Button>
+              <Button variant="outline" onClick={onUnpublish} className="flex-1 h-9 border-red-500/20 text-sm text-red-400/60 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/40">Unpublish</Button>
               <Button onClick={onClose} className="flex-1 h-9 bg-white text-sm text-black hover:bg-white/90">Done</Button>
             </div>
           </div>
