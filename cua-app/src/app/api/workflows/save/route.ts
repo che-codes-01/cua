@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       id: workflow.id,
       workspace_id: workspaceId,
       name: workflow.name,
-      nodes: workflow.nodes,
+      nodes: { nodes: workflow.nodes, edges: workflow.edges ?? [] },
       runner_id: workflow.runnerId || null,
       published: workflow.published || false,
       updated_at: new Date().toISOString(),

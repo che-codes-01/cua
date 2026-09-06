@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
       id: workflow.id,
       workspace_id: workspaceId,
       name: workflow.name,
-      nodes: workflow.nodes,
+      nodes: { nodes: workflow.nodes, edges: workflow.edges ?? [] },
       runner_id: workflow.runnerId,
       webhook_key_hash: webhookKeyHash,
       published: true,

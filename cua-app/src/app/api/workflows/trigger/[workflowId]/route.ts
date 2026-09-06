@@ -92,13 +92,32 @@ export async function POST(
       started_at: new Date().toISOString(),
     });
 
-    // Build the actions to execute (skip the webhook trigger node)
-    const actions = workflow.nodes
-      .filter((node: { type: string }) => node.type !== "webhook_trigger")
-      .map((node: { type: string; params: Record<string, unknown> }) => ({
-        type: node.type,
-        ...node.params,
-      }));
+    // Build the actions to execute in edge-defined order (skip the webhook trigger)
+    const raw = workflow.nodes as { nodes: unknown[]; edges: { from: string; to: string }[] } | unknown[];
+    const allNodes: { id: string; type: string; params: Record<string, unknown> }[] =
+      Array.isArray(raw) ? (raw as never) : ((raw as { nodes: unknown[] }).nodes as never);
+    const edges: { from: string; to: string }[] =
+      Array.isArray(raw) ? [] : (raw as { edges: { from: string; to: string }[] }).edges ?? [];
+
+    // Traverse edges from trigger to build ordered action list
+    const trigger = allNodes.find(n => n.type === "webhook_trigger");
+    const orderedNodes: typeof allNodes = [];
+    if (trigger) {
+      const visited = new Set<string>();
+      let cur: string | undefined = trigger.id;
+      while (cur && !visited.has(cur)) {
+        const node = allNodes.find(n => n.id === cur);
+        if (node) orderedNodes.push(node);
+        visited.add(cur);
+        cur = edges.find(e => e.from === cur)?.to;
+      }
+    } else {
+      orderedNodes.push(...allNodes);
+    }
+
+    const actions = orderedNodes
+      .filter(node => node.type !== "webhook_trigger")
+      .map(node => ({ type: node.type, ...node.params }));
 
     // TODO: Send actions to the runner via WebSocket service
     // For now, we'll return the execution info

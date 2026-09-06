@@ -37,8 +37,9 @@ type WFNode = {
   position: { x: number; y: number };
   params: Record<string, unknown>;
 };
+type WFEdge = { id: string; from: string; to: string };
 type Workflow = {
-  id: string; name: string; nodes: WFNode[];
+  id: string; name: string; nodes: WFNode[]; edges: WFEdge[];
   published: boolean; webhookKey?: string; runnerId?: string;
 };
 type Runner = { id: string; name: string; status: string };
@@ -112,6 +113,7 @@ export default function WorkflowEditorPage() {
   const [workflow, setWorkflow] = useState<Workflow>({
     id: crypto.randomUUID(), name: "Untitled Workflow",
     nodes: [{ id: "trigger-1", type: "webhook_trigger", position: { x: 80, y: 180 }, params: {} }],
+    edges: [],
     published: false,
   });
   const [nodeOutputs,  setNodeOutputs]  = useState<Record<string, NodeOutput>>({});
@@ -142,24 +144,31 @@ export default function WorkflowEditorPage() {
     origins: Record<string, { x: number; y: number }>; // node positions at drag start
   } | null>(null);
   const [dragCandidate, setDragCandidate] = useState<{ id: string; mx: number; my: number } | null>(null);
-  // prevent the canvas onClick from clearing selection after a marquee drag
-  const didMarquee  = useRef(false);
-  // drag-to-reorder: slot (array index) where the dragged node will land
-  const [reorderSlot, setReorderSlot] = useState<number | null>(null);
   // useRef = synchronous (no stale-closure problem across mouse events)
   // useState = drives the visual rectangle only
   const marqueeRef = useRef<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+  const didMarquee  = useRef(false);  // prevents onClick clearing marquee selection
   const [marquee,   setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const DRAG_THRESHOLD = 5;
-  // marquee rubber-band selection
-  const [selectedConn, setSelectedConn] = useState<number | null>(null); // index into nodes.slice(1)
+  // drag-to-reorder slot removed — order is now determined by explicit edges
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null);
+  // drawing new connections by dragging from output handle
+  const [drawingFrom,    setDrawingFrom]    = useState<string | null>(null);
+  const [drawCursorPos,  setDrawCursorPos]  = useState<{ x: number; y: number } | null>(null);
 
   // load workflow
   useEffect(() => {
     if (!workflowId) { setIsLoading(false); return; }
     fetch(`/api/workflows/get?id=${workflowId}`).then(r => r.json()).then(d => {
       if (d.workflow) {
-        setWorkflow({ id: d.workflow.id, name: d.workflow.name, nodes: d.workflow.nodes || [], published: d.workflow.published, webhookKey: d.workflow.webhook_key_hash ? "(hidden)" : undefined, runnerId: d.workflow.runner_id });
+        const raw = d.workflow.nodes;
+        const isLegacy = Array.isArray(raw);
+        const loadedNodes: WFNode[] = isLegacy ? raw : (raw?.nodes ?? []);
+        // Migrate legacy array format: generate edges from sequential order
+        const loadedEdges: WFEdge[] = isLegacy
+          ? loadedNodes.slice(0,-1).map((n: WFNode, i: number) => ({ id: `e-${i}`, from: n.id, to: loadedNodes[i+1].id }))
+          : (raw?.edges ?? []);
+        setWorkflow({ id: d.workflow.id, name: d.workflow.name, nodes: loadedNodes, edges: loadedEdges, published: d.workflow.published, webhookKey: d.workflow.webhook_key_hash ? "(hidden)" : undefined, runnerId: d.workflow.runner_id });
         if (d.workflow.runner_id) setRunnerId(d.workflow.runner_id);
       }
     }).catch(console.error).finally(() => setIsLoading(false));
@@ -172,9 +181,10 @@ export default function WorkflowEditorPage() {
       const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
       if (!inInput) {
         if (e.key === "Delete" || e.key === "Backspace") {
-          if (selectedConn !== null) {
-            // just deselect the connection — don't delete the node
-            setSelectedConn(null);
+          if (selectedEdgeId) {
+            // delete just the connection — keep both nodes
+            setWorkflow(w => ({ ...w, edges: w.edges.filter(e => e.id !== selectedEdgeId) }));
+            setSelectedEdgeId(null);
           } else {
             workflow.nodes
               .filter(n => selectedIds.has(n.id) && n.type !== "webhook_trigger")
@@ -183,7 +193,7 @@ export default function WorkflowEditorPage() {
         }
         if (e.key === "Escape") {
           setSelectedIds(new Set()); setConfigId(null); setAddMenu(null);
-          setShowShortcuts(false); setSelectedConn(null);
+          setShowShortcuts(false); setSelectedEdgeId(null); setDrawingFrom(null); setDrawCursorPos(null);
         }
         if (e.key === "n" || e.key === "N") {
           e.preventDefault();
@@ -231,7 +241,7 @@ export default function WorkflowEditorPage() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedIds, selectedConn, workflow]);
+  }, [selectedIds, selectedEdgeId, workflow]);
 
   // ── handlers ───────────────────────────────────────────────────────────────
   function addNodeAfter(toolType: string, afterId: string) {
@@ -239,13 +249,33 @@ export default function WorkflowEditorPage() {
     if (!tool) return;
     const defaults: Record<string, unknown> = {};
     tool.params.forEach(p => { if (p.default !== undefined) defaults[p.name] = p.default; else if (p.type === "coordinate") defaults[p.name] = [0,0]; });
-    const idx  = workflow.nodes.findIndex(n => n.id === afterId);
-    const prev = workflow.nodes[idx];
+    const prev = workflow.nodes.find(n => n.id === afterId);
+    if (!prev) return;
     const newNode: WFNode = { id: crypto.randomUUID(), type: toolType, position: { x: prev.position.x + 290, y: prev.position.y }, params: defaults };
-    setWorkflow(w => ({ ...w, nodes: [...w.nodes.slice(0, idx+1), newNode, ...w.nodes.slice(idx+1)] }));
+
+    setWorkflow(w => {
+      // Find any existing edge from afterId (so we can chain through new node)
+      const existing = w.edges.find(e => e.from === afterId);
+      const keptEdges = w.edges.filter(e => e.id !== existing?.id);
+      const newEdges: WFEdge[] = [
+        ...keptEdges,
+        { id: crypto.randomUUID(), from: afterId,    to: newNode.id },  // afterId → newNode
+        ...(existing ? [{ id: crypto.randomUUID(), from: newNode.id, to: existing.to }] : []),  // newNode → previous-next
+      ];
+      return { ...w, nodes: [...w.nodes, newNode], edges: newEdges };
+    });
     setSelectedIds(new Set([newNode.id]));
     setConfigId(newNode.id);
     setAddMenu(null);
+  }
+
+  function addEdge(fromId: string, toId: string) {
+    if (fromId === toId) return;
+    setWorkflow(w => {
+      // Remove any existing edge from source or into target
+      const cleaned = w.edges.filter(e => e.from !== fromId && e.to !== toId);
+      return { ...w, edges: [...cleaned, { id: crypto.randomUUID(), from: fromId, to: toId }] };
+    });
   }
 
   function updateNode(id: string, params: Record<string, unknown>) {
@@ -257,7 +287,11 @@ export default function WorkflowEditorPage() {
   function deleteNode(id: string) {
     const node = workflow.nodes.find(n => n.id === id);
     if (!node || node.type === "webhook_trigger") return;
-    setWorkflow(w => ({ ...w, nodes: w.nodes.filter(n => n.id !== id) }));
+    setWorkflow(w => ({
+      ...w,
+      nodes: w.nodes.filter(n => n.id !== id),
+      edges: w.edges.filter(e => e.from !== id && e.to !== id),
+    }));
     setSelectedIds(prev => { const s = new Set(prev); s.delete(id); return s; });
     if (configId === id) setConfigId(null);
   }
@@ -302,7 +336,20 @@ export default function WorkflowEditorPage() {
   async function testRun() {
     const target = runnerId ?? workflow.runnerId;
     if (!target) { setShowPublish(true); return; }
-    const actionNodes = workflow.nodes.filter(n => n.type !== "webhook_trigger");
+    // Compute execution order from edges (starting from trigger)
+    const trigger = workflow.nodes.find(n => n.type === "webhook_trigger");
+    const orderedNodes: WFNode[] = [];
+    if (trigger) {
+      const visited = new Set<string>();
+      let cur: string | undefined = trigger.id;
+      while (cur && !visited.has(cur)) {
+        const node = workflow.nodes.find(n => n.id === cur);
+        if (node) orderedNodes.push(node);
+        visited.add(cur);
+        cur = workflow.edges.find(e => e.from === cur)?.to;
+      }
+    }
+    const actionNodes = orderedNodes.filter(n => n.type !== "webhook_trigger");
     if (!actionNodes.length) return;
     setNodeOutputs({});
     for (const node of actionNodes) {
@@ -379,6 +426,14 @@ export default function WorkflowEditorPage() {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
+    // Track cursor for connection drawing
+    if (drawingFrom) {
+      setDrawCursorPos({
+        x: (e.clientX - rect.left) / zoom,
+        y: (e.clientY - rect.top)  / zoom,
+      });
+    }
+
     // Activate drag once past threshold
     if (dragCandidate && !dragging) {
       const dx = Math.abs(e.clientX - dragCandidate.mx);
@@ -401,26 +456,6 @@ export default function WorkflowEditorPage() {
           return { ...n, position: { x: Math.max(0, o.x + dx), y: Math.max(0, o.y + dy) } };
         }),
       }));
-
-      // Compute reorder slot when dragging a single non-trigger node
-      if (dragging.ids.length === 1) {
-        const dragId   = dragging.ids[0];
-        const dragNode = workflow.nodes.find(n => n.id === dragId);
-        if (dragNode && dragNode.type !== "webhook_trigger") {
-          const dragCX = dragNode.position.x + NODE_W / 2;
-          // Other nodes in array order, excluding the one being dragged
-          const others = workflow.nodes.filter(n => n.id !== dragId);
-          // Find the slot: slot = index in `others` after which we insert
-          // (slot 1 = after trigger, slot others.length = at end)
-          let slot = 1;
-          for (let i = 1; i < others.length; i++) {
-            if (dragCX > others[i].position.x + NODE_W / 2) slot = i + 1;
-          }
-          setReorderSlot(slot);
-        }
-      } else {
-        setReorderSlot(null);
-      }
     }
 
     // Marquee — read from ref (always current, no stale-closure issue)
@@ -434,21 +469,9 @@ export default function WorkflowEditorPage() {
     }
   }
   function onCanvasMouseUp(e: React.MouseEvent) {
-    // Apply reorder if a single node was dragged to a new slot
-    if (dragging && dragging.ids.length === 1 && reorderSlot !== null) {
-      const dragId = dragging.ids[0];
-      setWorkflow(w => {
-        const nodes    = [...w.nodes];
-        const fromIdx  = nodes.findIndex(n => n.id === dragId);
-        if (fromIdx < 1) return w; // never move trigger
-        const [node]   = nodes.splice(fromIdx, 1);
-        // Adjust slot for the removed element
-        const insertAt = Math.max(1, reorderSlot > fromIdx ? reorderSlot - 1 : reorderSlot);
-        nodes.splice(insertAt, 0, node);
-        return { ...w, nodes };
-      });
-    }
-    setDragging(null); setDragCandidate(null); setReorderSlot(null);
+    // Cancel connection drawing if released on canvas (not on a handle)
+    if (drawingFrom) { setDrawingFrom(null); setDrawCursorPos(null); }
+    setDragging(null); setDragCandidate(null);
     const m = marqueeRef.current;   // read from ref — always latest
     if (m) {
       const mx1 = Math.min(m.sx, m.ex), mx2 = Math.max(m.sx, m.ex);
@@ -519,12 +542,12 @@ export default function WorkflowEditorPage() {
         onClick={() => {
           // don't clear selection if we just finished a marquee drag
           if (didMarquee.current) { didMarquee.current = false; return; }
-          setSelectedIds(new Set()); setAddMenu(null); setSelectedConn(null);
+          setSelectedIds(new Set()); setAddMenu(null); setSelectedEdgeId(null);
         }}
         onMouseDown={onCanvasMouseDown}
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
-        onMouseLeave={() => { setDragging(null); setDragCandidate(null); marqueeRef.current = null; setMarquee(null); setReorderSlot(null); }}
+        onMouseLeave={() => { setDragging(null); setDragCandidate(null); marqueeRef.current = null; setMarquee(null); setDrawingFrom(null); setDrawCursorPos(null); }}
         onWheel={e => {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
@@ -534,7 +557,7 @@ export default function WorkflowEditorPage() {
       >
         {/* Zoomable layer */}
         <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: `${100 / zoom}%`, height: `${100 / zoom}%` }}>
-        {/* SVG connections — pointer-events on each path individually */}
+        {/* SVG connections — drawn from explicit edges */}
         <svg className="absolute inset-0 size-full overflow-visible" style={{ pointerEvents: "none" }}>
           <defs>
             <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
@@ -543,25 +566,28 @@ export default function WorkflowEditorPage() {
             <marker id="arrow-sel" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
               <path d="M0,0 L0,6 L6,3 z" fill="rgba(239,68,68,0.8)" />
             </marker>
+            <marker id="arrow-draw" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L6,3 z" fill="rgba(59,130,246,0.9)" />
+            </marker>
           </defs>
-          {workflow.nodes.slice(1).map((node, i) => {
-            const prev = workflow.nodes[i];
-            const sx = prev.position.x + NODE_W, sy = prev.position.y + NODE_H / 2;
-            const ex = node.position.x,          ey = node.position.y + NODE_H / 2;
+
+          {/* Existing edges */}
+          {workflow.edges.map(edge => {
+            const fromNode = workflow.nodes.find(n => n.id === edge.from);
+            const toNode   = workflow.nodes.find(n => n.id === edge.to);
+            if (!fromNode || !toNode) return null;
+            const sx = fromNode.position.x + NODE_W, sy = fromNode.position.y + NODE_H / 2;
+            const ex = toNode.position.x,            ey = toNode.position.y   + NODE_H / 2;
             const mx = (sx + ex) / 2;
-            const isSel = selectedConn === i;
+            const isSel = selectedEdgeId === edge.id;
             return (
-              <g key={node.id} style={{ pointerEvents: "stroke" }}>
-                {/* Invisible fat hit-area path */}
-                <path
-                  d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
+              <g key={edge.id} style={{ pointerEvents: "stroke" }}>
+                <path d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
                   fill="none" stroke="transparent" strokeWidth="12"
                   style={{ pointerEvents: "stroke", cursor: "pointer" }}
-                  onClick={e => { e.stopPropagation(); setSelectedConn(isSel ? null : i); setSelectedIds(new Set()); }}
+                  onClick={e => { e.stopPropagation(); setSelectedEdgeId(isSel ? null : edge.id); setSelectedIds(new Set()); }}
                 />
-                {/* Visible path */}
-                <path
-                  d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
+                <path d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
                   fill="none"
                   stroke={isSel ? "rgba(239,68,68,0.7)" : "rgba(255,255,255,0.12)"}
                   strokeWidth={isSel ? 2 : 1.5}
@@ -573,23 +599,17 @@ export default function WorkflowEditorPage() {
             );
           })}
 
-          {/* Reorder drop indicator — blue vertical line at the target slot */}
-          {reorderSlot !== null && (() => {
-            const others = workflow.nodes.filter(n => dragging && !dragging.ids.includes(n.id));
-            const prev   = others[reorderSlot - 1];
-            const next   = others[reorderSlot];
-            if (!prev) return null;
-            // X = right edge of prev node (or midpoint between prev & next)
-            const x  = next
-              ? (prev.position.x + NODE_W + next.position.x) / 2
-              : prev.position.x + NODE_W + 40;
-            const y1 = Math.min(prev.position.y, next?.position.y ?? prev.position.y) - 16;
-            const y2 = Math.max(prev.position.y, next?.position.y ?? prev.position.y) + NODE_H + 16;
+          {/* In-progress connection being drawn from output handle */}
+          {drawingFrom && drawCursorPos && (() => {
+            const fromNode = workflow.nodes.find(n => n.id === drawingFrom);
+            if (!fromNode) return null;
+            const sx = fromNode.position.x + NODE_W, sy = fromNode.position.y + NODE_H / 2;
+            const ex = drawCursorPos.x, ey = drawCursorPos.y;
+            const mx = (sx + ex) / 2;
             return (
-              <line
-                x1={x} y1={y1} x2={x} y2={y2}
-                stroke="rgba(59,130,246,0.8)" strokeWidth="2" strokeDasharray="4 3"
-                style={{ pointerEvents: "none" }}
+              <path d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
+                fill="none" stroke="rgba(59,130,246,0.8)" strokeWidth="2" strokeDasharray="6 3"
+                markerEnd="url(#arrow-draw)" style={{ pointerEvents: "none" }}
               />
             );
           })()}
@@ -617,6 +637,14 @@ export default function WorkflowEditorPage() {
               onOpen={() => { setSelectedIds(new Set([node.id])); setConfigId(node.id); }}
               onMouseDown={e => onNodeMouseDown(e, node.id)}
               onAdd={(x, y) => setAddMenu({ afterId: node.id, x, y, search: "" })}
+              onOutputHandleMouseDown={e => { e.stopPropagation(); setDrawingFrom(node.id); }}
+              onInputHandleMouseUp={e => {
+                e.stopPropagation();
+                if (drawingFrom && drawingFrom !== node.id) {
+                  addEdge(drawingFrom, node.id);
+                  setDrawingFrom(null); setDrawCursorPos(null);
+                }
+              }}
             />
           );
         })}
@@ -742,10 +770,12 @@ export default function WorkflowEditorPage() {
 }
 
 // ─── NodeCard ─────────────────────────────────────────────────────────────────
-function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onMouseDown, onAdd }: {
+function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onMouseDown, onAdd, onOutputHandleMouseDown, onInputHandleMouseUp }: {
   node: WFNode; tool: ToolDef; selected: boolean; running: boolean; output: NodeOutput | null;
   onSelect: (e: React.MouseEvent) => void; onOpen: () => void; onMouseDown: (e: React.MouseEvent) => void;
   onAdd: (x: number, y: number) => void;
+  onOutputHandleMouseDown: (e: React.MouseEvent) => void;
+  onInputHandleMouseUp: (e: React.MouseEvent) => void;
 }) {
   const isAssert = tool.category === "assert";
   const summary  = paramSummary(node, tool);
@@ -758,9 +788,12 @@ function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onM
       onDoubleClick={e => { e.stopPropagation(); onOpen(); }}
       onMouseDown={onMouseDown}
     >
-      {/* Input handle */}
+      {/* Input handle — drop target for incoming connections */}
       {node.type !== "webhook_trigger" && (
-        <div className="absolute -left-2 top-1/2 -translate-y-1/2 size-3.5 rounded-full border-2 border-white/25 bg-[#0d0d0d] z-10" />
+        <div
+          className="absolute -left-2 top-1/2 -translate-y-1/2 size-3.5 rounded-full border-2 border-white/25 bg-[#0d0d0d] z-10 hover:border-blue-400/80 hover:scale-125 transition-transform cursor-crosshair"
+          onMouseUp={e => { e.stopPropagation(); onInputHandleMouseUp(e); }}
+        />
       )}
 
       {/* Card */}
@@ -814,9 +847,13 @@ function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onM
         </div>
       )}
 
-      {/* Output handle + add button */}
+      {/* Output handle — drag to draw a new connection, click + to add node */}
       <div className="absolute -right-7 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
-        <div className="size-3.5 rounded-full border-2 border-white/25 bg-[#0d0d0d]" />
+        <div
+          className="size-3.5 rounded-full border-2 border-white/25 bg-[#0d0d0d] hover:border-blue-400/80 hover:scale-125 transition-transform cursor-crosshair"
+          onMouseDown={e => { e.stopPropagation(); onOutputHandleMouseDown(e); }}
+          title="Drag to connect to another node"
+        />
         <button
           onClick={e => {
             e.stopPropagation();
@@ -1115,7 +1152,7 @@ const SHORTCUTS: { section: string; rows: { keys: string[]; description: string 
     section: "Connection",
     rows: [
       { keys: ["Click"],        description: "Select connection line (turns red + dashed)" },
-      { keys: ["Del", "⌫"],    description: "Deselect connection (Esc also works)" },
+      { keys: ["Del", "⌫"],    description: "Delete selected connection (keeps both nodes)" },
       { keys: ["Esc"],          description: "Deselect connection" },
     ],
   },
