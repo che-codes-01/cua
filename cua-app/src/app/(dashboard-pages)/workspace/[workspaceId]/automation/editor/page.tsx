@@ -450,9 +450,13 @@ export default function WorkflowEditorPage() {
     e.preventDefault();
     const rect = canvasRef.current?.getBoundingClientRect();
     if (rect) {
+      const MENU_HEIGHT = 480; // approx height with all sections
+      const MENU_WIDTH  = 200;
+      const spaceBelow  = window.innerHeight - e.clientY;
+      const spaceRight  = window.innerWidth  - e.clientX;
       setToolsMenuPosition({
-        x: e.clientX - rect.left,
-        y: e.clientY - rect.top,
+        x: spaceRight < MENU_WIDTH  ? e.clientX - rect.left - MENU_WIDTH  : e.clientX - rect.left,
+        y: spaceBelow < MENU_HEIGHT ? e.clientY - rect.top  - MENU_HEIGHT : e.clientY - rect.top,
       });
       setShowToolsMenu(true);
     }
@@ -832,8 +836,8 @@ export default function WorkflowEditorPage() {
                 onClick={() => setShowToolsMenu(false)}
               />
               <div
-                className="absolute z-50 w-[200px] rounded-xl border border-white/[0.08] bg-[#111] py-2 shadow-xl"
-                style={{ left: toolsMenuPosition.x, top: toolsMenuPosition.y }}
+                className="absolute z-50 w-[200px] rounded-xl border border-white/[0.08] bg-[#111] py-2 shadow-xl overflow-y-auto max-h-[80vh]"
+                style={{ left: toolsMenuPosition.x, top: toolsMenuPosition.y, maxHeight: "80vh" }}
               >
                 <p className="mb-2 px-3 font-mono text-[9px] uppercase tracking-wider text-white/20">
                   Add Node
