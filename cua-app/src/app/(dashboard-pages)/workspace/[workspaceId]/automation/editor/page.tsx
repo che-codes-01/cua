@@ -185,12 +185,17 @@ export default function WorkflowEditorPage() {
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "a") {
         e.preventDefault();
-        setSelectedIds(new Set(workflow.nodes.filter(n => n.type !== "webhook_trigger").map(n => n.id)));
+        setSelectedIds(new Set(workflow.nodes.map(n => n.id))); // include trigger
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "c") {
         const toCopy = workflow.nodes.filter(n => selectedIds.has(n.id));
         if (!toCopy.length) return;
-        const payload = JSON.stringify({ __cua_nodes__: true, nodes: toCopy.map(({ id: _id, ...rest }) => rest) });
+        // strip id (re-assigned on paste) + never copy secrets
+        const payload = JSON.stringify({
+          __cua_nodes__: true,
+          nodes: toCopy.map(({ id: _id, ...rest }) => rest),
+          // explicitly omit webhookKey and runnerId
+        });
         navigator.clipboard.writeText(payload).catch(() => {});
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "v" && !inInput) {
@@ -251,7 +256,11 @@ export default function WorkflowEditorPage() {
   }
 
   function exportWorkflow() {
-    const json = JSON.stringify({ __cua_nodes__: true, nodes: workflow.nodes.map(({ id: _id, ...rest }) => rest) }, null, 2);
+    const json = JSON.stringify({
+      __cua_nodes__: true,
+      nodes: workflow.nodes.map(({ id: _id, ...rest }) => rest),
+      // webhookKey and runnerId intentionally omitted
+    }, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = `${workflow.name.replace(/\s+/g, "-")}.json`; a.click();
