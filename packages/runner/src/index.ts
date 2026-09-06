@@ -57,6 +57,14 @@ function getSession(sessionId: string): SessionState {
 let ws:             WebSocket;
 let reconnectDelay  = 2_000;
 let heartbeatTimer: NodeJS.Timeout | null = null;
+let pongTimeout:    NodeJS.Timeout | null = null;   // detects half-open TCP
+let awaitingPong    = false;
+
+function clearTimers(): void {
+  if (heartbeatTimer) { clearInterval(heartbeatTimer);  heartbeatTimer = null; }
+  if (pongTimeout)    { clearTimeout(pongTimeout);       pongTimeout    = null; }
+  awaitingPong = false;
+}
 
 function connect(): void {
   const url = `${config.serviceUrl}/runner/ws?apiKey=${config.apiKey}&runnerId=${config.runnerId}`;
@@ -66,15 +74,45 @@ function connect(): void {
 
   ws.on('open', () => {
     reconnectDelay = 2_000;
+    awaitingPong   = false;
     log.info('✓ Connected');
 
+    // Send an application heartbeat + WS protocol ping every 20 s.
+    // The protocol ping detects half-open TCP connections that the runner
+    // cannot detect any other way (OS hasn't flushed the socket yet).
     heartbeatTimer = setInterval(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        send({ type: 'heartbeat' });
-      } else {
-        if (heartbeatTimer) clearInterval(heartbeatTimer);
+      if (ws.readyState !== WebSocket.OPEN) {
+        clearTimers();
+        return;
       }
-    }, 30_000);
+
+      // If the last ping never got a pong the connection is dead
+      if (awaitingPong) {
+        log.warn('⚠ Ping timeout — connection is half-open. Forcing reconnect.');
+        clearTimers();
+        ws.terminate();
+        return;
+      }
+
+      send({ type: 'heartbeat' });   // application-level (updates DB last_seen)
+      ws.ping();                      // WS protocol-level (detects dead TCP)
+      awaitingPong = true;
+
+      // If no pong within 15 s, force reconnect
+      pongTimeout = setTimeout(() => {
+        if (awaitingPong) {
+          log.warn('⚠ No pong in 15 s — terminating dead connection.');
+          clearTimers();
+          ws.terminate();
+        }
+      }, 15_000);
+    }, 20_000);
+  });
+
+  ws.on('pong', () => {
+    awaitingPong = false;
+    if (pongTimeout) { clearTimeout(pongTimeout); pongTimeout = null; }
+    log.debug('pong ✓ (WS-level)');
   });
 
   ws.on('message', async (raw) => {
@@ -86,7 +124,7 @@ function connect(): void {
   });
 
   ws.on('close', (code, reason) => {
-    if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
+    clearTimers();
     log.warn(`Disconnected (${code}: ${reason || 'no reason'}). Reconnecting in ${reconnectDelay / 1000}s…`);
     setTimeout(connect, reconnectDelay);
     reconnectDelay = Math.min(reconnectDelay * 2, 30_000);

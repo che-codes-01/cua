@@ -127,15 +127,17 @@ class Store {
   async setRunnerStatus(id: string, status: Runner['status']): Promise<void> {
     const r = this.runners.get(id);
     if (r) {
-      r.status = status;
+      r.status   = status;
       r.lastSeen = new Date().toISOString();
-
-      const { error } = await supabase?.from('runners').update({
-        status,
-        last_seen_at: r.lastSeen,
-      }).eq('id', id) ?? {};
-      if (error) log.error('setRunnerStatus Supabase error:', error.message);
     }
+    // Always write to Supabase even if the runner isn't in the in-memory map.
+    // This handles the service-restart scenario where the map is empty but
+    // the runner record already exists in the DB.
+    const { error } = await supabase?.from('runners').update({
+      status,
+      last_seen_at: new Date().toISOString(),
+    }).eq('id', id) ?? {};
+    if (error) log.error('setRunnerStatus Supabase error:', error.message);
   }
 
   /** Update lastSeen without changing status (used by heartbeat handler). */
