@@ -126,6 +126,12 @@ export default function WorkflowEditorPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [copiedHook,   setCopiedHook]   = useState(false);
   const [isLoading,    setIsLoading]    = useState(!!workflowId);
+  // canvas zoom (Ctrl/Cmd + wheel, or +/- buttons)
+  const [zoom,         setZoom]         = useState(1);
+  const MIN_ZOOM = 0.3, MAX_ZOOM = 2, ZOOM_STEP = 0.1;
+  function applyZoom(delta: number) {
+    setZoom(z => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((z + delta) * 10) / 10)));
+  }
   // drag — dragOrigin tracks mousedown position for the threshold check
   const [dragging,     setDragging]     = useState<{ id: string; ox: number; oy: number } | null>(null);
   const [dragOrigin,   setDragOrigin]   = useState<{ id: string; cx: number; cy: number } | null>(null);
@@ -172,6 +178,9 @@ export default function WorkflowEditorPage() {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); testRun(); }
       if (e.key === "?" && !inInput) { e.preventDefault(); setShowShortcuts(s => !s); }
+      if ((e.metaKey || e.ctrlKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); applyZoom(ZOOM_STEP); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "-") { e.preventDefault(); applyZoom(-ZOOM_STEP); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "0") { e.preventDefault(); setZoom(1); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -340,12 +349,20 @@ export default function WorkflowEditorPage() {
       <div
         ref={canvasRef}
         className="relative flex-1 overflow-hidden bg-[#080808] select-none"
-        style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+        style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: `${24 * zoom}px ${24 * zoom}px` }}
         onClick={() => { setSelectedId(null); setAddMenu(null); setSelectedConn(null); }}
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
         onMouseLeave={onCanvasMouseUp}
+        onWheel={e => {
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            applyZoom(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+          }
+        }}
       >
+        {/* Zoomable layer */}
+        <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: `${100 / zoom}%`, height: `${100 / zoom}%` }}>
         {/* SVG connections — pointer-events on each path individually */}
         <svg className="absolute inset-0 size-full overflow-visible" style={{ pointerEvents: "none" }}>
           <defs>
@@ -414,29 +431,44 @@ export default function WorkflowEditorPage() {
             </div>
           </div>
         )}
+        </div>{/* /zoomable layer */}
 
-        {/* Add-node menu */}
+        {/* Zoom controls */}
+        <div className="absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-white/[0.08] bg-[#111]/90 px-2 py-1 backdrop-blur-sm">
+          <button onClick={() => applyZoom(-ZOOM_STEP)} className="flex size-6 items-center justify-center rounded text-white/40 hover:bg-white/[0.06] hover:text-white transition-colors text-sm">−</button>
+          <button onClick={() => setZoom(1)} className="px-2 text-[10px] tabular-nums text-white/30 hover:text-white transition-colors min-w-[3rem] text-center">{Math.round(zoom * 100)}%</button>
+          <button onClick={() => applyZoom(ZOOM_STEP)}  className="flex size-6 items-center justify-center rounded text-white/40 hover:bg-white/[0.06] hover:text-white transition-colors text-sm">+</button>
+        </div>
+
+        {/* Add-node menu — fixed + centered, Esc closes it */}
         {addMenu && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setAddMenu(null)} />
             <div
-              className="absolute z-50 w-52 rounded-xl border border-white/[0.08] bg-[#111] shadow-2xl overflow-hidden"
-              style={{ left: addMenu.x, top: addMenu.y }}
+              className="fixed z-50 w-[300px] max-w-[92vw] rounded-xl border border-white/[0.08] bg-[#111] shadow-2xl overflow-hidden"
+              style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
               onClick={e => e.stopPropagation()}
+              onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); setAddMenu(null); } }}
             >
-              {/* Search */}
-              <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2">
-                <FiSearch className="size-3 text-white/30" />
-                <input
-                  autoFocus
-                  value={addMenu.search}
-                  onChange={e => setAddMenu(m => m ? { ...m, search: e.target.value } : m)}
-                  placeholder="Search actions…"
-                  className="flex-1 bg-transparent text-[11px] text-white/70 outline-none placeholder:text-white/20"
-                />
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-white/[0.06] px-3 py-2.5">
+                <div className="flex items-center gap-2 flex-1">
+                  <FiSearch className="size-3.5 text-white/30 shrink-0" />
+                  <input
+                    autoFocus
+                    value={addMenu.search}
+                    onChange={e => setAddMenu(m => m ? { ...m, search: e.target.value } : m)}
+                    onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); setAddMenu(null); } }}
+                    placeholder="Search actions…"
+                    className="flex-1 bg-transparent text-[11px] text-white/70 outline-none placeholder:text-white/20"
+                  />
+                </div>
+                <button onClick={() => setAddMenu(null)} className="ml-2 text-white/25 hover:text-white transition-colors shrink-0">
+                  <FiX className="size-3.5" />
+                </button>
               </div>
               {/* List */}
-              <div className="max-h-72 overflow-y-auto py-1">
+              <div className="max-h-[60vh] overflow-y-auto py-1">
                 {(["mouse","keyboard","screen","utility","assert"] as const).map(cat => {
                   const items = TOOLS.filter(t => t.category === cat && (addMenu.search === "" || t.name.toLowerCase().includes(addMenu.search.toLowerCase()) || t.description.toLowerCase().includes(addMenu.search.toLowerCase())));
                   if (!items.length) return null;
@@ -447,16 +479,19 @@ export default function WorkflowEditorPage() {
                       </p>
                       {items.map(tool => (
                         <button key={tool.type} onClick={() => addNodeAfter(tool.type, addMenu.afterId)}
-                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/[0.04]">
-                          <div className={`rounded-md p-1 ${tool.color} shrink-0`}><tool.icon className="size-2.5 text-white" /></div>
-                          <span className="text-[11px] text-white/60">{tool.name}</span>
+                          className="flex w-full items-center gap-2.5 px-3 py-2 text-left hover:bg-white/[0.04]">
+                          <div className={`rounded-md p-1.5 ${tool.color} shrink-0`}><tool.icon className="size-3 text-white" /></div>
+                          <div>
+                            <p className="text-[11px] text-white/70">{tool.name}</p>
+                            <p className="text-[9px] text-white/25">{tool.description}</p>
+                          </div>
                         </button>
                       ))}
                     </div>
                   );
                 })}
                 {addMenu.search && TOOLS.filter(t => t.category !== "trigger" && (t.name.toLowerCase().includes(addMenu.search.toLowerCase()) || t.description.toLowerCase().includes(addMenu.search.toLowerCase()))).length === 0 && (
-                  <p className="px-3 py-3 text-[11px] text-white/20">No results for "{addMenu.search}"</p>
+                  <p className="px-3 py-4 text-[11px] text-white/20">No results for "{addMenu.search}"</p>
                 )}
               </div>
             </div>
@@ -806,6 +841,10 @@ const SHORTCUTS: { section: string; rows: { keys: string[]; description: string 
       { keys: ["N"],            description: "Open add-node menu (adds after last node)" },
       { keys: ["Right-click"],  description: "Open add-node menu at cursor position" },
       { keys: ["+"],            description: "Add node after — click the + handle on any node" },
+      { keys: ["⌘", "+"],       description: "Zoom in" },
+      { keys: ["⌘", "-"],       description: "Zoom out" },
+      { keys: ["⌘", "0"],       description: "Reset zoom to 100%" },
+      { keys: ["Ctrl+Wheel"],   description: "Pinch-to-zoom with trackpad / mouse wheel" },
     ],
   },
   {
