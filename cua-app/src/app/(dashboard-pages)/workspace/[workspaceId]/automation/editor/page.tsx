@@ -1,35 +1,18 @@
 "use client";
-
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams, useParams } from "next/navigation";
 import {
-  FiArrowLeft,
-  FiCheck,
-  FiCheckCircle,
-  FiChevronDown,
-  FiCopy,
-  FiLink,
-  FiMonitor,
-  FiMousePointer,
-  FiPlay,
-  FiPlus,
-  FiSave,
-  FiSettings,
-  FiShield,
-  FiTrash2,
-  FiType,
-  FiX,
-  FiXCircle,
-  FiZap,
-  FiGlobe,
-  FiCpu,
-  FiLock,
+  FiArrowLeft, FiCheck, FiCheckCircle, FiCopy, FiGlobe, FiCpu, FiLock,
+  FiMonitor, FiMousePointer, FiPlay, FiPlus, FiSave, FiShield, FiTrash2,
+  FiType, FiX, FiXCircle, FiZap, FiSearch, FiTerminal, FiMove,
 } from "react-icons/fi";
-
 import { Button } from "@/components/ui/button";
 
-// ============ Tool Definitions ============
+// ─── Constants ────────────────────────────────────────────────────────────────
+const NODE_W = 240;
+const NODE_H = 64; // used for handle vertical centering
 
+// ─── Types ────────────────────────────────────────────────────────────────────
 type ToolParam = {
   name: string;
   type: "number" | "string" | "select" | "coordinate";
@@ -39,1218 +22,693 @@ type ToolParam = {
   required?: boolean;
   default?: string | number;
 };
-
-type ToolDefinition = {
-  type: string;
-  name: string;
-  description: string;
+type ToolDef = {
+  type: string; name: string; description: string;
   icon: React.ElementType;
-  category: "trigger" | "mouse" | "keyboard" | "screen" | "utility" | "assert";
-  color: string;
-  params: ToolParam[];
+  category: "trigger"|"mouse"|"keyboard"|"screen"|"utility"|"assert";
+  color: string; params: ToolParam[];
 };
-
-const TOOLS: ToolDefinition[] = [
-  // Trigger
-  {
-    type: "webhook_trigger",
-    name: "Webhook Trigger",
-    description: "Start workflow via HTTP request",
-    icon: FiGlobe,
-    category: "trigger",
-    color: "bg-purple-500",
-    params: [],
-  },
-
-  // Mouse actions
-  {
-    type: "left_click",
-    name: "Left Click",
-    description: "Click at a coordinate",
-    icon: FiMousePointer,
-    category: "mouse",
-    color: "bg-blue-500",
-    params: [
-      { name: "coordinate", type: "coordinate", label: "Position (x, y)", required: true },
-    ],
-  },
-  {
-    type: "double_click",
-    name: "Double Click",
-    description: "Double-click at a coordinate",
-    icon: FiMousePointer,
-    category: "mouse",
-    color: "bg-blue-500",
-    params: [
-      { name: "coordinate", type: "coordinate", label: "Position (x, y)", required: true },
-    ],
-  },
-  {
-    type: "right_click",
-    name: "Right Click",
-    description: "Right-click at a coordinate",
-    icon: FiMousePointer,
-    category: "mouse",
-    color: "bg-blue-500",
-    params: [
-      { name: "coordinate", type: "coordinate", label: "Position (x, y)", required: true },
-    ],
-  },
-  {
-    type: "mouse_move",
-    name: "Mouse Move",
-    description: "Move mouse to a coordinate",
-    icon: FiMousePointer,
-    category: "mouse",
-    color: "bg-blue-500",
-    params: [
-      { name: "coordinate", type: "coordinate", label: "Position (x, y)", required: true },
-    ],
-  },
-  {
-    type: "left_click_drag",
-    name: "Click & Drag",
-    description: "Drag from one point to another",
-    icon: FiMousePointer,
-    category: "mouse",
-    color: "bg-blue-500",
-    params: [
-      { name: "start_coordinate", type: "coordinate", label: "Start (x, y)", required: true },
-      { name: "coordinate", type: "coordinate", label: "End (x, y)", required: true },
-    ],
-  },
-  {
-    type: "scroll",
-    name: "Scroll",
-    description: "Scroll in a direction",
-    icon: FiMousePointer,
-    category: "mouse",
-    color: "bg-blue-500",
-    params: [
-      { name: "coordinate", type: "coordinate", label: "Position (x, y)" },
-      {
-        name: "scroll_direction",
-        type: "select",
-        label: "Direction",
-        required: true,
-        options: [
-          { value: "up", label: "Up" },
-          { value: "down", label: "Down" },
-          { value: "left", label: "Left" },
-          { value: "right", label: "Right" },
-        ],
-      },
-      { name: "scroll_amount", type: "number", label: "Amount", required: true, default: 3 },
-    ],
-  },
-  {
-    type: "click_text",
-    name: "Click Text",
-    description: "Find and click on text",
-    icon: FiMousePointer,
-    category: "mouse",
-    color: "bg-blue-500",
-    params: [
-      { name: "text", type: "string", label: "Text to find", required: true, placeholder: "Button text..." },
-      {
-        name: "button",
-        type: "select",
-        label: "Click type",
-        options: [
-          { value: "left", label: "Left click" },
-          { value: "right", label: "Right click" },
-          { value: "double", label: "Double click" },
-        ],
-        default: "left",
-      },
-    ],
-  },
-
-  // Keyboard actions
-  {
-    type: "type",
-    name: "Type Text",
-    description: "Type text using keyboard",
-    icon: FiType,
-    category: "keyboard",
-    color: "bg-green-500",
-    params: [
-      { name: "text", type: "string", label: "Text to type", required: true, placeholder: "Hello world..." },
-    ],
-  },
-  {
-    type: "key",
-    name: "Press Key",
-    description: "Press a key or key combination",
-    icon: FiType,
-    category: "keyboard",
-    color: "bg-green-500",
-    params: [
-      { name: "text", type: "string", label: "Key(s)", required: true, placeholder: "cmd+c, enter, tab..." },
-    ],
-  },
-
-  // Screen actions
-  {
-    type: "screenshot",
-    name: "Screenshot",
-    description: "Capture the screen",
-    icon: FiMonitor,
-    category: "screen",
-    color: "bg-orange-500",
-    params: [],
-  },
-  {
-    type: "find_text",
-    name: "Find Text",
-    description: "Find text on screen",
-    icon: FiMonitor,
-    category: "screen",
-    color: "bg-orange-500",
-    params: [
-      { name: "text", type: "string", label: "Text to find", required: true, placeholder: "Search text..." },
-    ],
-  },
-
-  // Utility actions
-  {
-    type: "wait",
-    name: "Wait",
-    description: "Pause for a duration",
-    icon: FiZap,
-    category: "utility",
-    color: "bg-yellow-500",
-    params: [
-      { name: "duration", type: "number", label: "Seconds", required: true, default: 1 },
-    ],
-  },
-  {
-    type: "shell",
-    name: "Run Command",
-    description: "Execute a shell command",
-    icon: FiZap,
-    category: "utility",
-    color: "bg-yellow-500",
-    params: [
-      { name: "command", type: "string", label: "Command", required: true, placeholder: "ls -la" },
-    ],
-  },
-
-  // ── Assertion nodes — workflow checkpoints ──────────────────────────────────
-  // These stop the workflow with a clear error if the condition is not met.
-  {
-    type: "assert_text_visible",
-    name: "Assert Visible",
-    description: "Fail if text is not on screen",
-    icon: FiCheckCircle,
-    category: "assert",
-    color: "bg-amber-500",
-    params: [
-      {
-        name: "text",
-        type: "string",
-        label: "Expected text",
-        required: true,
-        placeholder: "Success, Submit, Error…",
-      },
-      {
-        name: "min_score",
-        type: "number",
-        label: "Min confidence (0–1)",
-        default: 0.7,
-      },
-      {
-        name: "message",
-        type: "string",
-        label: "Failure message (optional)",
-        placeholder: "Expected to see the confirmation dialog…",
-      },
-    ],
-  },
-  {
-    type: "assert_text_not_visible",
-    name: "Assert Not Visible",
-    description: "Fail if text IS on screen",
-    icon: FiXCircle,
-    category: "assert",
-    color: "bg-red-500",
-    params: [
-      {
-        name: "text",
-        type: "string",
-        label: "Text that must NOT appear",
-        required: true,
-        placeholder: "Error, Failed, Denied…",
-      },
-      {
-        name: "max_score",
-        type: "number",
-        label: "Max score before failing (0–1)",
-        default: 0.7,
-      },
-      {
-        name: "message",
-        type: "string",
-        label: "Failure message (optional)",
-        placeholder: "An error message appeared unexpectedly…",
-      },
-    ],
-  },
-  {
-    type: "assert_result_contains",
-    name: "Assert Output",
-    description: "Fail if previous step output is missing text",
-    icon: FiShield,
-    category: "assert",
-    color: "bg-violet-500",
-    params: [
-      {
-        name: "expected",
-        type: "string",
-        label: "Expected substring",
-        required: true,
-        placeholder: "exit code 0, true, OK…",
-      },
-      {
-        name: "case_sensitive",
-        type: "select",
-        label: "Case sensitive",
-        options: [
-          { value: "false", label: "No (default)" },
-          { value: "true",  label: "Yes" },
-        ],
-        default: "false",
-      },
-      {
-        name: "message",
-        type: "string",
-        label: "Failure message (optional)",
-        placeholder: "Command did not succeed…",
-      },
-    ],
-  },
-];
-
-// ============ Types ============
-
-type WorkflowNode = {
-  id: string;
-  type: string;
-  name?: string; // Custom step name
+type NodeOutput = {
+  success: boolean; text: string; durationMs: number; resultType: string;
+};
+type WFNode = {
+  id: string; type: string; name?: string;
   position: { x: number; y: number };
   params: Record<string, unknown>;
 };
-
 type Workflow = {
-  id: string;
-  name: string;
-  nodes: WorkflowNode[];
-  published: boolean;
-  webhookKey?: string;
-  runnerId?: string;
+  id: string; name: string; nodes: WFNode[];
+  published: boolean; webhookKey?: string; runnerId?: string;
 };
+type Runner = { id: string; name: string; status: string };
 
-type Runner = {
-  id: string;
-  name: string;
-  status: "online" | "offline" | "busy";
-};
+// ─── Tool catalogue ───────────────────────────────────────────────────────────
+const TOOLS: ToolDef[] = [
+  { type:"webhook_trigger", name:"Webhook Trigger", description:"HTTP POST entry", icon:FiGlobe, category:"trigger", color:"bg-purple-500", params:[] },
+  // mouse
+  { type:"left_click",      name:"Left Click",    description:"Click at position",       icon:FiMousePointer, category:"mouse", color:"bg-blue-500",  params:[{name:"coordinate",type:"coordinate",label:"Position (x, y)",required:true}] },
+  { type:"double_click",    name:"Double Click",  description:"Double-click",             icon:FiMousePointer, category:"mouse", color:"bg-blue-500",  params:[{name:"coordinate",type:"coordinate",label:"Position (x, y)",required:true}] },
+  { type:"right_click",     name:"Right Click",   description:"Right-click",              icon:FiMousePointer, category:"mouse", color:"bg-blue-500",  params:[{name:"coordinate",type:"coordinate",label:"Position (x, y)",required:true}] },
+  { type:"mouse_move",      name:"Mouse Move",    description:"Move cursor",              icon:FiMousePointer, category:"mouse", color:"bg-blue-500",  params:[{name:"coordinate",type:"coordinate",label:"Position (x, y)",required:true}] },
+  { type:"mouse_down",      name:"Mouse Down",    description:"Hold mouse button",        icon:FiMousePointer, category:"mouse", color:"bg-blue-600",  params:[{name:"coordinate",type:"coordinate",label:"Position",required:true},{name:"button",type:"select",label:"Button",options:[{value:"left",label:"Left"},{value:"right",label:"Right"}],default:"left"}] },
+  { type:"mouse_up",        name:"Mouse Up",      description:"Release mouse button",     icon:FiMousePointer, category:"mouse", color:"bg-blue-600",  params:[{name:"coordinate",type:"coordinate",label:"Position",required:true},{name:"button",type:"select",label:"Button",options:[{value:"left",label:"Left"},{value:"right",label:"Right"}],default:"left"}] },
+  { type:"left_click_drag", name:"Click & Drag",  description:"Drag A → B",               icon:FiMove,         category:"mouse", color:"bg-blue-500",  params:[{name:"start_coordinate",type:"coordinate",label:"Start (x, y)",required:true},{name:"coordinate",type:"coordinate",label:"End (x, y)",required:true}] },
+  { type:"scroll",          name:"Scroll",        description:"Scroll in direction",      icon:FiMousePointer, category:"mouse", color:"bg-blue-500",  params:[{name:"coordinate",type:"coordinate",label:"Position"},{name:"scroll_direction",type:"select",label:"Direction",required:true,options:[{value:"up",label:"Up"},{value:"down",label:"Down"},{value:"left",label:"Left"},{value:"right",label:"Right"}]},{name:"scroll_amount",type:"number",label:"Amount",required:true,default:3}] },
+  { type:"click_text",      name:"Click Text",    description:"OCR click by label",       icon:FiMousePointer, category:"mouse", color:"bg-blue-500",  params:[{name:"text",type:"string",label:"Text to find",required:true},{name:"button",type:"select",label:"Click",options:[{value:"left",label:"Left"},{value:"right",label:"Right"},{value:"double",label:"Double"}],default:"left"}] },
+  // keyboard
+  { type:"type",   name:"Type Text",  description:"Type with keyboard",      icon:FiType,     category:"keyboard", color:"bg-green-500", params:[{name:"text",type:"string",label:"Text",required:true,placeholder:"Hello world..."}] },
+  { type:"key",    name:"Press Key",  description:"Key or combo",            icon:FiType,     category:"keyboard", color:"bg-green-500", params:[{name:"text",type:"string",label:"Key(s)",required:true,placeholder:"cmd+c, enter..."}] },
+  { type:"hotkey", name:"Hotkey",     description:"Simultaneous keys",       icon:FiType,     category:"keyboard", color:"bg-green-600", params:[{name:"keys",type:"string",label:"Keys (comma-separated)",required:true,placeholder:"cmd, shift, t"}] },
+  // screen
+  { type:"screenshot", name:"Screenshot", description:"Capture screen",     icon:FiMonitor,  category:"screen", color:"bg-orange-500", params:[] },
+  { type:"find_text",  name:"Find Text",  description:"OCR search",         icon:FiMonitor,  category:"screen", color:"bg-orange-500", params:[{name:"text",type:"string",label:"Text to find",required:true}] },
+  // utility
+  { type:"wait",         name:"Wait",         description:"Pause",               icon:FiZap,      category:"utility", color:"bg-yellow-500", params:[{name:"duration",type:"number",label:"Seconds",required:true,default:1}] },
+  { type:"shell",        name:"Run Command",  description:"Shell command",        icon:FiTerminal, category:"utility", color:"bg-yellow-500", params:[{name:"command",type:"string",label:"Command",required:true,placeholder:"ls -la"}] },
+  { type:"open",         name:"Open",         description:"Open URL or file",     icon:FiGlobe,    category:"utility", color:"bg-yellow-600", params:[{name:"target",type:"string",label:"URL or path",required:true,placeholder:"https://..."}] },
+  { type:"launch",       name:"Launch App",   description:"Start application",    icon:FiZap,      category:"utility", color:"bg-yellow-600", params:[{name:"app",type:"string",label:"App / path",required:true},{name:"args",type:"string",label:"Args (space-separated)"}] },
+  { type:"focus_window", name:"Focus Window", description:"Bring window to front",icon:FiMonitor,  category:"utility", color:"bg-yellow-600", params:[{name:"app",type:"string",label:"App name (partial)"},{name:"title",type:"string",label:"Window title (partial)"}] },
+  // assertions
+  { type:"assert_text_visible",     name:"Assert Visible",     description:"Fail if text missing",     icon:FiCheckCircle, category:"assert", color:"bg-amber-500",  params:[{name:"text",type:"string",label:"Expected text",required:true},{name:"min_score",type:"number",label:"Min confidence (0–1)",default:0.7},{name:"message",type:"string",label:"Failure message"}] },
+  { type:"assert_text_not_visible", name:"Assert Not Visible", description:"Fail if text present",     icon:FiXCircle,     category:"assert", color:"bg-red-500",    params:[{name:"text",type:"string",label:"Text must NOT appear",required:true},{name:"max_score",type:"number",label:"Max score (0–1)",default:0.7},{name:"message",type:"string",label:"Failure message"}] },
+  { type:"assert_result_contains",  name:"Assert Output",      description:"Fail if output missing",   icon:FiShield,      category:"assert", color:"bg-violet-500", params:[{name:"expected",type:"string",label:"Expected substring",required:true},{name:"message",type:"string",label:"Failure message"}] },
+];
 
-// ============ Main Component ============
-
+// ─── Param summary (shown on node body) ───────────────────────────────────────
+function paramSummary(node: WFNode, tool: ToolDef): string {
+  const p = node.params;
+  const coord = (k: string) => { const c = p[k] as [number,number]|undefined; return c ? `(${c[0]}, ${c[1]})` : "set position"; };
+  switch (node.type) {
+    case "webhook_trigger":      return "HTTP POST trigger";
+    case "left_click": case "right_click": case "double_click":
+    case "mouse_move": case "mouse_down": case "mouse_up":
+                                 return coord("coordinate");
+    case "left_click_drag":      return `${coord("start_coordinate")} → ${coord("coordinate")}`;
+    case "type":                 return `"${String(p.text ?? "").slice(0,30)}"`;
+    case "key":                  return String(p.text ?? "");
+    case "hotkey":               return String(p.keys ?? "");
+    case "scroll":               return `${p.scroll_direction} ×${p.scroll_amount}`;
+    case "wait":                 return `${p.duration ?? 1}s`;
+    case "shell":                return String(p.command ?? "").slice(0,30);
+    case "open":                 return String(p.target ?? "").slice(0,30);
+    case "launch":               return String(p.app ?? "");
+    case "find_text": case "click_text": return `"${String(p.text ?? "").slice(0,28)}"`;
+    case "assert_text_visible":  return `✓ "${String(p.text ?? "").slice(0,24)}"`;
+    case "assert_text_not_visible": return `✗ "${String(p.text ?? "").slice(0,24)}"`;
+    case "assert_result_contains":  return `∋ "${String(p.expected ?? "").slice(0,24)}"`;
+    default: return tool.params.length ? `${tool.params.length} params` : tool.description;
+  }
+}
+// ─── Main component ─────────────────────────────────────────────────────────
 export default function WorkflowEditorPage() {
-  const router = useRouter();
+  const router       = useRouter();
   const searchParams = useSearchParams();
-  const params = useParams();
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const params       = useParams();
+  const canvasRef    = useRef<HTMLDivElement>(null);
+  const workflowId   = searchParams.get("id");
+  const workspaceId  = params.workspaceId as string;
 
-  const workflowId = searchParams.get("id");
-  const workspaceId = params.workspaceId as string;
-
-  // Workflow state
   const [workflow, setWorkflow] = useState<Workflow>({
-    id: crypto.randomUUID(),
-    name: "Untitled Workflow",
-    nodes: [
-      {
-        id: "trigger-1",
-        type: "webhook_trigger",
-        position: { x: 100, y: 200 },
-        params: {},
-      },
-    ],
+    id: crypto.randomUUID(), name: "Untitled Workflow",
+    nodes: [{ id: "trigger-1", type: "webhook_trigger", position: { x: 80, y: 180 }, params: {} }],
     published: false,
   });
-
-  const [isLoading, setIsLoading] = useState(!!workflowId);
-
-  // UI state
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [showToolsMenu, setShowToolsMenu] = useState(false);
-  const [toolsMenuPosition, setToolsMenuPosition] = useState({ x: 0, y: 0 });
-  const [showPublishModal, setShowPublishModal] = useState(false);
-  const [runners, setRunners] = useState<Runner[]>([]);
-  const [selectedRunnerId, setSelectedRunnerId] = useState<string | null>(null);
+  const [nodeOutputs,  setNodeOutputs]  = useState<Record<string, NodeOutput>>({});
+  const [runningId,    setRunningId]    = useState<string | null>(null);
+  const [selectedId,   setSelectedId]   = useState<string | null>(null);
+  const [configId,     setConfigId]     = useState<string | null>(null);
+  const [addMenu,      setAddMenu]      = useState<{ afterId: string; x: number; y: number; search: string } | null>(null);
+  const [showPublish,  setShowPublish]  = useState(false);
+  const [runners,      setRunners]      = useState<Runner[]>([]);
+  const [runnerId,     setRunnerId]     = useState<string | null>(null);
+  const [isSaving,     setIsSaving]     = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [copiedWebhook, setCopiedWebhook] = useState(false);
-  const [loadingRunners, setLoadingRunners] = useState(false);
+  const [copiedHook,   setCopiedHook]   = useState(false);
+  const [isLoading,    setIsLoading]    = useState(!!workflowId);
+  // drag
+  const [dragging,     setDragging]     = useState<{ id: string; ox: number; oy: number } | null>(null);
 
-  // Dragging state
-  const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
-  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
-
-  const selectedNode = workflow.nodes.find((n) => n.id === selectedNodeId);
-  const selectedTool = selectedNode ? TOOLS.find((t) => t.type === selectedNode.type) : null;
-
-  // Load existing workflow if editing
+  // load workflow
   useEffect(() => {
-    if (!workflowId) {
-      setIsLoading(false);
-      return;
-    }
-
-    async function loadWorkflow() {
-      try {
-        const res = await fetch(`/api/workflows/get?id=${workflowId}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.workflow) {
-            setWorkflow({
-              id: data.workflow.id,
-              name: data.workflow.name,
-              nodes: data.workflow.nodes || [],
-              published: data.workflow.published,
-              webhookKey: data.workflow.webhook_key_hash ? "(hidden)" : undefined,
-              runnerId: data.workflow.runner_id,
-            });
-            if (data.workflow.runner_id) {
-              setSelectedRunnerId(data.workflow.runner_id);
-            }
-          }
-        }
-      } catch (e) {
-        console.error(e);
-      } finally {
-        setIsLoading(false);
+    if (!workflowId) { setIsLoading(false); return; }
+    fetch(`/api/workflows/get?id=${workflowId}`).then(r => r.json()).then(d => {
+      if (d.workflow) {
+        setWorkflow({ id: d.workflow.id, name: d.workflow.name, nodes: d.workflow.nodes || [], published: d.workflow.published, webhookKey: d.workflow.webhook_key_hash ? "(hidden)" : undefined, runnerId: d.workflow.runner_id });
+        if (d.workflow.runner_id) setRunnerId(d.workflow.runner_id);
       }
-    }
-    loadWorkflow();
+    }).catch(console.error).finally(() => setIsLoading(false));
   }, [workflowId]);
 
-  // Handle canvas click to add node
-  function handleCanvasClick(e: React.MouseEvent) {
-    if (e.target === canvasRef.current) {
-      setSelectedNodeId(null);
-    }
-  }
-
-  // Handle canvas right-click to show tools menu
-  function handleCanvasContextMenu(e: React.MouseEvent) {
-    e.preventDefault();
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (rect) {
-      const MENU_HEIGHT = 480; // approx height with all sections
-      const MENU_WIDTH  = 200;
-      const spaceBelow  = window.innerHeight - e.clientY;
-      const spaceRight  = window.innerWidth  - e.clientX;
-      setToolsMenuPosition({
-        x: spaceRight < MENU_WIDTH  ? e.clientX - rect.left - MENU_WIDTH  : e.clientX - rect.left,
-        y: spaceBelow < MENU_HEIGHT ? e.clientY - rect.top  - MENU_HEIGHT : e.clientY - rect.top,
-      });
-      setShowToolsMenu(true);
-    }
-  }
-
-  // Add a new node
-  function addNode(toolType: string) {
-    const tool = TOOLS.find((t) => t.type === toolType);
-    if (!tool) return;
-
-    const defaultParams: Record<string, unknown> = {};
-    tool.params.forEach((p) => {
-      if (p.default !== undefined) {
-        defaultParams[p.name] = p.default;
-      } else if (p.type === "coordinate") {
-        defaultParams[p.name] = [0, 0];
+  // keyboard shortcuts
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+      if (!inInput) {
+        if (e.key === "Delete" || e.key === "Backspace") { if (selectedId) deleteNode(selectedId); }
+        if (e.key === "Escape") { setSelectedId(null); setConfigId(null); setAddMenu(null); }
       }
-    });
-
-    // Position new node after the last one
-    const lastNode = workflow.nodes[workflow.nodes.length - 1];
-    const newPosition = lastNode
-      ? { x: lastNode.position.x + 200, y: lastNode.position.y }
-      : { x: toolsMenuPosition.x, y: toolsMenuPosition.y };
-
-    const newNode: WorkflowNode = {
-      id: crypto.randomUUID(),
-      type: toolType,
-      position: newPosition,
-      params: defaultParams,
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); testRun(); }
     };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId, workflow]);
 
-    setWorkflow((prev) => ({
-      ...prev,
-      nodes: [...prev.nodes, newNode],
-    }));
-    setSelectedNodeId(newNode.id);
-    setShowToolsMenu(false);
+  // ── handlers ───────────────────────────────────────────────────────────────
+  function addNodeAfter(toolType: string, afterId: string) {
+    const tool = TOOLS.find(t => t.type === toolType);
+    if (!tool) return;
+    const defaults: Record<string, unknown> = {};
+    tool.params.forEach(p => { if (p.default !== undefined) defaults[p.name] = p.default; else if (p.type === "coordinate") defaults[p.name] = [0,0]; });
+    const idx  = workflow.nodes.findIndex(n => n.id === afterId);
+    const prev = workflow.nodes[idx];
+    const newNode: WFNode = { id: crypto.randomUUID(), type: toolType, position: { x: prev.position.x + 290, y: prev.position.y }, params: defaults };
+    setWorkflow(w => ({ ...w, nodes: [...w.nodes.slice(0, idx+1), newNode, ...w.nodes.slice(idx+1)] }));
+    setSelectedId(newNode.id);
+    setConfigId(newNode.id);
+    setAddMenu(null);
   }
 
-  // Update node params
-  function updateNode(nodeId: string, params: Record<string, unknown>) {
-    setWorkflow((prev) => ({
-      ...prev,
-      nodes: prev.nodes.map((n) =>
-        n.id === nodeId ? { ...n, params: { ...n.params, ...params } } : n
-      ),
-    }));
+  function updateNode(id: string, params: Record<string, unknown>) {
+    setWorkflow(w => ({ ...w, nodes: w.nodes.map(n => n.id === id ? { ...n, params: { ...n.params, ...params } } : n) }));
+  }
+  function updateNodeName(id: string, name: string) {
+    setWorkflow(w => ({ ...w, nodes: w.nodes.map(n => n.id === id ? { ...n, name: name || undefined } : n) }));
+  }
+  function deleteNode(id: string) {
+    const node = workflow.nodes.find(n => n.id === id);
+    if (!node || node.type === "webhook_trigger") return;
+    setWorkflow(w => ({ ...w, nodes: w.nodes.filter(n => n.id !== id) }));
+    if (selectedId === id) setSelectedId(null);
+    if (configId  === id) setConfigId(null);
   }
 
-  // Update node name
-  function updateNodeName(nodeId: string, name: string) {
-    setWorkflow((prev) => ({
-      ...prev,
-      nodes: prev.nodes.map((n) =>
-        n.id === nodeId ? { ...n, name: name || undefined } : n
-      ),
-    }));
-  }
-
-  // Delete node
-  function deleteNode(nodeId: string) {
-    // Don't delete the trigger
-    const node = workflow.nodes.find((n) => n.id === nodeId);
-    if (node?.type === "webhook_trigger") return;
-
-    setWorkflow((prev) => ({
-      ...prev,
-      nodes: prev.nodes.filter((n) => n.id !== nodeId),
-    }));
-    if (selectedNodeId === nodeId) {
-      setSelectedNodeId(null);
-    }
-  }
-
-  // Handle node drag
-  function handleNodeMouseDown(e: React.MouseEvent, nodeId: string) {
-    e.stopPropagation();
-    const node = workflow.nodes.find((n) => n.id === nodeId);
-    if (!node) return;
-
-    setDraggingNodeId(nodeId);
-    setDragOffset({
-      x: e.clientX - node.position.x,
-      y: e.clientY - node.position.y,
-    });
-  }
-
-  function handleMouseMove(e: React.MouseEvent) {
-    if (!draggingNodeId) return;
-
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    setWorkflow((prev) => ({
-      ...prev,
-      nodes: prev.nodes.map((n) =>
-        n.id === draggingNodeId
-          ? {
-              ...n,
-              position: {
-                x: Math.max(0, e.clientX - rect.left - dragOffset.x + rect.left),
-                y: Math.max(0, e.clientY - rect.top - dragOffset.y + rect.top),
-              },
-            }
-          : n
-      ),
-    }));
-  }
-
-  function handleMouseUp() {
-    setDraggingNodeId(null);
-  }
-
-  // Open publish modal and fetch live runners
-  async function openPublishModal() {
-    setShowPublishModal(true);
-    setLoadingRunners(true);
-    
-    try {
-      if (workspaceId) {
-        // Fetch live connected runners
-        const res = await fetch(`/api/runners/live?workspaceId=${workspaceId}`);
-        if (res.ok) {
-          const data = await res.json();
-          setRunners(data.runners || []);
-        }
-      }
-    } catch (e) {
-      console.error("Failed to fetch runners:", e);
-    } finally {
-      setLoadingRunners(false);
-    }
-  }
-
-  // Publish workflow
-  async function publishWorkflow() {
-    if (!selectedRunnerId) return;
-
-    setIsPublishing(true);
-    try {
-      const res = await fetch("/api/workflows/publish", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workflow: {
-            ...workflow,
-            runnerId: selectedRunnerId,
-          },
-          workspaceId,
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setWorkflow((prev) => ({
-          ...prev,
-          published: true,
-          webhookKey: data.webhookKey,
-          runnerId: selectedRunnerId,
-        }));
-      }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsPublishing(false);
-    }
-  }
-
-  // Save workflow
-  async function saveWorkflow() {
-    if (!workspaceId) {
-      console.error("No workspaceId available");
-      return;
-    }
-    
+  async function save() {
+    if (!workspaceId) return;
     setIsSaving(true);
     try {
-      console.log("Saving workflow with workspaceId:", workspaceId);
-      const res = await fetch("/api/workflows/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ workflow, workspaceId }),
-      });
-      
-      if (res.ok) {
-        // Update URL to include workflow ID if not already there
-        if (!workflowId) {
-          router.replace(`/workspace/${workspaceId}/automation/editor?id=${workflow.id}`);
-        }
+      await fetch("/api/workflows/save", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflow, workspaceId }) });
+      if (!workflowId) router.replace(`/workspace/${workspaceId}/automation/editor?id=${workflow.id}`);
+    } catch(e) { console.error(e); } finally { setIsSaving(false); }
+  }
+
+  async function testRun() {
+    const target = runnerId ?? workflow.runnerId;
+    if (!target) { setShowPublish(true); return; }
+    const actionNodes = workflow.nodes.filter(n => n.type !== "webhook_trigger");
+    if (!actionNodes.length) return;
+    setNodeOutputs({});
+    for (const node of actionNodes) {
+      setRunningId(node.id);
+      const t0 = Date.now();
+      try {
+        const res  = await fetch("/api/workflows/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runnerId: target, action: { type: node.type, ...node.params } }) });
+        const data = await res.json();
+        const ok   = res.ok && !data.error;
+        setNodeOutputs(prev => ({ ...prev, [node.id]: { success: ok, text: ok ? (data.result?.text ?? JSON.stringify(data.result)) : (data.error ?? "Failed"), durationMs: Date.now()-t0, resultType: data.result?.type ?? "text" } }));
+        if (!ok) break;
+      } catch(err) {
+        setNodeOutputs(prev => ({ ...prev, [node.id]: { success: false, text: String(err), durationMs: Date.now()-t0, resultType: "error" } }));
+        break;
       }
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setIsSaving(false);
     }
+    setRunningId(null);
   }
 
-  // Copy webhook URL
-  async function copyWebhookUrl() {
-    const url = `${window.location.origin}/api/workflows/trigger/${workflow.id}`;
-    await navigator.clipboard.writeText(url);
-    setCopiedWebhook(true);
-    setTimeout(() => setCopiedWebhook(false), 2000);
+  async function openPublish() {
+    setShowPublish(true);
+    const res = await fetch(`/api/runners/live?workspaceId=${workspaceId}`).then(r => r.json()).catch(() => ({ runners: [] }));
+    setRunners(res.runners ?? []);
+  }
+  async function publishWorkflow() {
+    const target = runnerId ?? workflow.runnerId;
+    if (!target) return;
+    setIsPublishing(true);
+    try {
+      const res  = await fetch("/api/workflows/publish", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workflow: { ...workflow, runnerId: target }, workspaceId }) });
+      const data = await res.json();
+      if (res.ok) setWorkflow(w => ({ ...w, published: true, webhookKey: data.webhookKey, runnerId: target }));
+    } catch(e) { console.error(e); } finally { setIsPublishing(false); }
   }
 
-  const webhookUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/api/workflows/trigger/${workflow.id}`;
-
-  if (isLoading) {
-    return (
-      <main className="flex h-screen items-center justify-center bg-[#0a0a0a] text-white">
-        <div className="text-white/30">Loading workflow...</div>
-      </main>
-    );
+  // drag
+  function onNodeMouseDown(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    const node = workflow.nodes.find(n => n.id === id);
+    if (!node) return;
+    setDragging({ id, ox: e.clientX - node.position.x, oy: e.clientY - node.position.y });
+    setSelectedId(id);
   }
+  function onCanvasMouseMove(e: React.MouseEvent) {
+    if (!dragging) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setWorkflow(w => ({ ...w, nodes: w.nodes.map(n => n.id === dragging.id ? { ...n, position: { x: Math.max(0, e.clientX - rect.left - dragging.ox + rect.left - rect.left), y: Math.max(0, e.clientY - rect.top - dragging.oy + rect.top - rect.top) } } : n) }));
+  }
+  function onCanvasMouseUp() { setDragging(null); }
+
+  const webhookUrl = typeof window !== "undefined" ? `${window.location.origin}/api/workflows/trigger/${workflow.id}` : "";
+  const configNode = workflow.nodes.find(n => n.id === configId);
+  const configTool = configNode ? TOOLS.find(t => t.type === configNode.type) : null;
+
+  if (isLoading) return <main className="flex h-screen items-center justify-center bg-[#0a0a0a] text-white/30">Loading…</main>;
 
   return (
     <main className="flex h-screen flex-col bg-[#0a0a0a] text-white">
       {/* Header */}
-      <header className="flex h-14 shrink-0 items-center justify-between border-b border-white/[0.06] px-4">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => router.push(`/workspace/${workspaceId}/automation`)}
-            className="flex items-center gap-2 text-white/40 hover:text-white"
-          >
-            <FiArrowLeft className="size-4" />
-          </button>
-          <div className="h-5 w-px bg-white/[0.06]" />
-          <input
-            type="text"
-            value={workflow.name}
-            onChange={(e) => setWorkflow((prev) => ({ ...prev, name: e.target.value }))}
-            className="bg-transparent text-sm font-medium text-white/80 outline-none"
-          />
-          {workflow.published && (
-            <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400">
-              Published
-            </span>
-          )}
+      <header className="flex h-13 shrink-0 items-center justify-between border-b border-white/[0.06] px-4 gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button onClick={() => router.push(`/workspace/${workspaceId}/automation`)} className="text-white/30 hover:text-white shrink-0"><FiArrowLeft className="size-4" /></button>
+          <div className="w-px h-4 bg-white/[0.06] shrink-0" />
+          <input value={workflow.name} onChange={e => setWorkflow(w => ({ ...w, name: e.target.value }))} className="bg-transparent text-sm font-medium text-white/80 outline-none min-w-0 w-40" />
+          {workflow.published && <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-[10px] text-emerald-400 shrink-0">Published</span>}
         </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={saveWorkflow}
-            disabled={isSaving}
-            className="h-8 border-white/[0.08] px-3 text-xs text-white/50 hover:bg-white/[0.04] hover:text-white"
-          >
-            <FiSave className="mr-2 size-3.5" />
-            {isSaving ? "Saving..." : "Save"}
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="hidden md:flex items-center gap-3 text-[10px] text-white/20 mr-2">
+            <span>⌘S save</span><span>⌘↵ run</span><span>Del delete</span><span>Esc deselect</span>
+          </span>
+          <Button variant="outline" onClick={save} disabled={isSaving} className="h-8 border-white/[0.08] px-3 text-xs text-white/40 hover:text-white hover:bg-white/[0.04]">
+            <FiSave className="mr-1.5 size-3" />{isSaving ? "Saving…" : "Save"}
           </Button>
-          <Button
-            onClick={openPublishModal}
-            className="h-8 bg-emerald-500 px-4 text-xs text-white hover:bg-emerald-600"
-          >
-            <FiGlobe className="mr-2 size-3.5" />
-            Publish
+          <Button onClick={testRun} disabled={!!runningId} className="h-8 bg-white/[0.08] hover:bg-white/[0.12] border border-white/[0.1] px-3 text-xs text-white/70">
+            <FiPlay className="mr-1.5 size-3" />{runningId ? "Running…" : "Test Run"}
+          </Button>
+          <Button onClick={openPublish} className="h-8 bg-emerald-500 hover:bg-emerald-600 px-3 text-xs text-white">
+            <FiGlobe className="mr-1.5 size-3" />Publish
           </Button>
         </div>
       </header>
 
-      <div className="flex flex-1 overflow-hidden">
-        {/* Canvas */}
-        <div
-          ref={canvasRef}
-          className="relative flex-1 overflow-hidden bg-[#080808]"
-          style={{
-            backgroundImage: `radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px)`,
-            backgroundSize: "24px 24px",
-          }}
-          onClick={handleCanvasClick}
-          onContextMenu={handleCanvasContextMenu}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-        >
-          {/* Connection lines */}
-          <svg className="pointer-events-none absolute inset-0 size-full">
-            {workflow.nodes.slice(1).map((node, index) => {
-              const prevNode = workflow.nodes[index];
-              if (!prevNode) return null;
-              
-              const startX = prevNode.position.x + 140;
-              const startY = prevNode.position.y + 40;
-              const endX = node.position.x;
-              const endY = node.position.y + 40;
-              const midX = (startX + endX) / 2;
-
-              return (
-                <path
-                  key={`line-${node.id}`}
-                  d={`M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`}
-                  fill="none"
-                  stroke="rgba(255,255,255,0.1)"
-                  strokeWidth="2"
-                />
-              );
-            })}
-          </svg>
-
-          {/* Nodes */}
-          {workflow.nodes.map((node, index) => {
-            const tool = TOOLS.find((t) => t.type === node.type);
-            if (!tool) return null;
-
+      {/* Canvas */}
+      <div
+        ref={canvasRef}
+        className="relative flex-1 overflow-hidden bg-[#080808] select-none"
+        style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
+        onClick={() => { setSelectedId(null); setAddMenu(null); }}
+        onMouseMove={onCanvasMouseMove}
+        onMouseUp={onCanvasMouseUp}
+        onMouseLeave={onCanvasMouseUp}
+      >
+        {/* SVG connections */}
+        <svg className="pointer-events-none absolute inset-0 size-full overflow-visible">
+          <defs>
+            <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L6,3 z" fill="rgba(255,255,255,0.15)" />
+            </marker>
+          </defs>
+          {workflow.nodes.slice(1).map((node, i) => {
+            const prev = workflow.nodes[i];
+            const sx = prev.position.x + NODE_W, sy = prev.position.y + NODE_H / 2;
+            const ex = node.position.x,          ey = node.position.y + NODE_H / 2;
+            const mx = (sx + ex) / 2;
             return (
-              <div
-                key={node.id}
-                className={`absolute cursor-move select-none ${
-                  selectedNodeId === node.id ? "z-10" : ""
-                }`}
-                style={{ left: node.position.x, top: node.position.y }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedNodeId(node.id);
-                }}
-                onMouseDown={(e) => handleNodeMouseDown(e, node.id)}
-              >
-                <div
-                  className={`w-[140px] rounded-xl border transition ${
-                    selectedNodeId === node.id
-                      ? "border-white/30 shadow-lg shadow-white/5"
-                      : "border-white/[0.08] hover:border-white/20"
-                  } ${
-                    // Assertion checkpoints get a subtle amber ring
-                    tool.category === "assert" ? "ring-1 ring-amber-500/40" : ""
-                  }`}
-                >
-                  {/* Node header */}
-                  <div className={`flex items-center gap-2 rounded-t-xl px-3 py-2 ${tool.color}`}>
-                    <tool.icon className="size-3.5 text-white" />
-                    <span className="truncate text-[10px] font-medium text-white">
-                      {node.name || tool.name}
-                    </span>
-                  </div>
-                  
-                  {/* Node body */}
-                  <div className="rounded-b-xl bg-[#111] px-3 py-2">
-                    <p className="text-[9px] text-white/30">
-                      {tool.category === "assert"
-                        ? // Show what's being asserted directly on the card
-                          (node.params.text as string) ||
-                          (node.params.expected as string) ||
-                          "configure…"
-                        : node.name && node.name !== tool.name
-                        ? tool.name
-                        : tool.params.length > 0
-                        ? `${tool.params.length} parameter${
-                            tool.params.length > 1 ? "s" : ""
-                          }`
-                        : tool.type === "webhook_trigger"
-                        ? "HTTP POST trigger"
-                        : "No parameters"}
-                    </p>
-                  </div>
-
-                  {/* Connection points */}
-                  {node.type !== "webhook_trigger" && (
-                    <div className="absolute -left-1.5 top-1/2 size-3 -translate-y-1/2 rounded-full border-2 border-white/20 bg-[#111]" />
-                  )}
-                  <div className="absolute -right-1.5 top-1/2 size-3 -translate-y-1/2 rounded-full border-2 border-white/20 bg-[#111]" />
-                </div>
-
-                {/* Step number */}
-                <div className="absolute -left-6 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-full bg-white/[0.06] text-[9px] text-white/40">
-                  {index + 1}
-                </div>
-              </div>
+              <path key={node.id}
+                d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
+                fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5"
+                markerEnd="url(#arrow)"
+              />
             );
           })}
+        </svg>
 
-          {/* Tools menu */}
-          {showToolsMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-40"
-                onClick={() => setShowToolsMenu(false)}
-              />
-              <div
-                className="absolute z-50 w-[200px] rounded-xl border border-white/[0.08] bg-[#111] py-2 shadow-xl overflow-y-auto max-h-[80vh]"
-                style={{ left: toolsMenuPosition.x, top: toolsMenuPosition.y, maxHeight: "80vh" }}
-              >
-                <p className="mb-2 px-3 font-mono text-[9px] uppercase tracking-wider text-white/20">
-                  Add Node
-                </p>
-                {["mouse", "keyboard", "screen", "utility", "assert"].map((category) => (
-                  <div key={category}>
-                    {/* Divider before assert section */}
-                    {category === "assert" && (
-                      <div className="mx-3 my-2 border-t border-amber-500/20" />
-                    )}
-                    <p className={`mt-2 px-3 text-[9px] capitalize ${
-                      category === "assert" ? "text-amber-500/60" : "text-white/30"
-                    }`}>
-                      {category === "assert" ? "⚠️ Assertions" : category}
-                    </p>
-                    {TOOLS.filter((t) => t.category === category).map((tool) => (
-                      <button
-                        key={tool.type}
-                        onClick={() => addNode(tool.type)}
-                        className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-[11px] text-white/60 hover:bg-white/[0.04] hover:text-white"
-                      >
-                        <div className={`rounded p-1 ${tool.color}`}>
-                          <tool.icon className="size-3 text-white" />
-                        </div>
-                        {tool.name}
-                      </button>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
+        {/* Nodes */}
+        {workflow.nodes.map((node) => {
+          const tool = TOOLS.find(t => t.type === node.type);
+          if (!tool) return null;
+          const output   = nodeOutputs[node.id];
+          const running  = runningId === node.id;
+          const selected = selectedId === node.id;
+          return (
+            <NodeCard
+              key={node.id}
+              node={node} tool={tool}
+              selected={selected} running={running} output={output ?? null}
+              onSelect={() => setSelectedId(node.id)}
+              onOpen={() => { setSelectedId(node.id); setConfigId(node.id); }}
+              onMouseDown={e => onNodeMouseDown(e, node.id)}
+              onAdd={(x, y) => setAddMenu({ afterId: node.id, x, y, search: "" })}
+            />
+          );
+        })}
 
-          {/* Empty state hint */}
-          {workflow.nodes.length === 1 && (
-            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-              <div className="ml-[200px] rounded-lg border border-dashed border-white/[0.08] bg-white/[0.02] px-6 py-4 text-center">
-                <p className="text-xs text-white/30">Right-click to add nodes</p>
-              </div>
+        {/* Empty hint */}
+        {workflow.nodes.length === 1 && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="ml-[300px] rounded-lg border border-dashed border-white/[0.06] px-5 py-3 text-center">
+              <p className="text-xs text-white/20">Click <kbd className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px]">+</kbd> on the trigger node to add a step</p>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Properties Panel */}
-        {selectedNode && selectedTool && (
-          <aside className="w-[280px] shrink-0 overflow-y-auto border-l border-white/[0.06] bg-[#0a0a0a]">
-            <div className="border-b border-white/[0.06] p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className={`rounded-lg p-2 ${selectedTool.color}`}>
-                    <selectedTool.icon className="size-4 text-white" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white/80">{selectedTool.name}</p>
-                    <p className="text-[10px] text-white/30">{selectedTool.description}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedNodeId(null)}
-                  className="text-white/30 hover:text-white"
-                >
-                  <FiX className="size-4" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-4">
-              {/* Step Name Input */}
-              <div className="mb-4">
-                <label className="mb-1.5 block text-[10px] text-white/40">Step Name</label>
+        {/* Add-node menu */}
+        {addMenu && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setAddMenu(null)} />
+            <div
+              className="absolute z-50 w-52 rounded-xl border border-white/[0.08] bg-[#111] shadow-2xl overflow-hidden"
+              style={{ left: addMenu.x, top: addMenu.y }}
+              onClick={e => e.stopPropagation()}
+            >
+              {/* Search */}
+              <div className="flex items-center gap-2 border-b border-white/[0.06] px-3 py-2">
+                <FiSearch className="size-3 text-white/30" />
                 <input
-                  type="text"
-                  value={selectedNode.name || ""}
-                  onChange={(e) => updateNodeName(selectedNode.id, e.target.value)}
-                  placeholder={selectedTool.name}
-                  className="w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs text-white/70 outline-none focus:border-white/20"
+                  autoFocus
+                  value={addMenu.search}
+                  onChange={e => setAddMenu(m => m ? { ...m, search: e.target.value } : m)}
+                  placeholder="Search actions…"
+                  className="flex-1 bg-transparent text-[11px] text-white/70 outline-none placeholder:text-white/20"
                 />
               </div>
-
-              {selectedNode.type === "webhook_trigger" ? (
-                <div>
-                  <p className="mb-3 font-mono text-[9px] uppercase tracking-wider text-white/20">
-                    Trigger Settings
-                  </p>
-                  <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
-                    <p className="text-[10px] text-white/40">
-                      This workflow will be triggered by an HTTP POST request to:
-                    </p>
-                    <code className="mt-2 block break-all rounded bg-black/30 p-2 font-mono text-[10px] text-white/60">
-                      POST /api/workflows/trigger/{workflow.id.slice(0, 8)}...
-                    </code>
-                    {workflow.webhookKey && (
-                      <div className="mt-3 border-t border-white/[0.06] pt-3">
-                        <p className="text-[10px] text-white/40">Header required:</p>
-                        <code className="mt-1 block rounded bg-black/30 p-2 font-mono text-[10px] text-white/60">
-                          x-webhook-key: {workflow.webhookKey.slice(0, 12)}...
-                        </code>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Assertion info banner */}
-                  {selectedTool.category === "assert" && (
-                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
-                      <p className="text-[10px] text-amber-400/80">
-                        <strong>Checkpoint node.</strong> The workflow stops here and reports a
-                        failure if the condition is not met. Use these after actions to verify
-                        the screen is in the expected state.
+              {/* List */}
+              <div className="max-h-72 overflow-y-auto py-1">
+                {(["mouse","keyboard","screen","utility","assert"] as const).map(cat => {
+                  const items = TOOLS.filter(t => t.category === cat && (addMenu.search === "" || t.name.toLowerCase().includes(addMenu.search.toLowerCase()) || t.description.toLowerCase().includes(addMenu.search.toLowerCase())));
+                  if (!items.length) return null;
+                  return (
+                    <div key={cat}>
+                      <p className={`px-3 pt-2 pb-0.5 text-[9px] uppercase tracking-wider ${cat === "assert" ? "text-amber-500/50" : "text-white/25"}`}>
+                        {cat === "assert" ? "⚠ Assertions" : cat}
                       </p>
+                      {items.map(tool => (
+                        <button key={tool.type} onClick={() => addNodeAfter(tool.type, addMenu.afterId)}
+                          className="flex w-full items-center gap-2 px-3 py-1.5 text-left hover:bg-white/[0.04]">
+                          <div className={`rounded-md p-1 ${tool.color} shrink-0`}><tool.icon className="size-2.5 text-white" /></div>
+                          <span className="text-[11px] text-white/60">{tool.name}</span>
+                        </button>
+                      ))}
                     </div>
-                  )}
-                  <p className="font-mono text-[9px] uppercase tracking-wider text-white/20">
-                    Parameters
-                  </p>
-                  {selectedTool.params.map((param) => (
-                    <ParamInput
-                      key={param.name}
-                      param={param}
-                      value={selectedNode.params[param.name]}
-                      onChange={(value) => updateNode(selectedNode.id, { [param.name]: value })}
-                    />
-                  ))}
-                  {selectedTool.params.length === 0 && (
-                    <p className="text-[10px] text-white/30">No parameters for this action</p>
-                  )}
-                </div>
-              )}
-
-              {selectedNode.type !== "webhook_trigger" && (
-                <button
-                  onClick={() => deleteNode(selectedNode.id)}
-                  className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-red-400/20 py-2 text-xs text-red-400/60 hover:bg-red-400/10 hover:text-red-400"
-                >
-                  <FiTrash2 className="size-3.5" />
-                  Delete Node
-                </button>
-              )}
+                  );
+                })}
+                {addMenu.search && TOOLS.filter(t => t.category !== "trigger" && (t.name.toLowerCase().includes(addMenu.search.toLowerCase()) || t.description.toLowerCase().includes(addMenu.search.toLowerCase()))).length === 0 && (
+                  <p className="px-3 py-3 text-[11px] text-white/20">No results for "{addMenu.search}"</p>
+                )}
+              </div>
             </div>
-          </aside>
+          </>
         )}
       </div>
 
-      {/* Publish Modal */}
-      {showPublishModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.08] bg-[#0a0a0a] p-6 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-emerald-500/20 p-2">
-                  <FiGlobe className="size-5 text-emerald-400" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-white">Publish Workflow</h2>
-                  <p className="text-xs text-white/40">Generate webhook and select runner</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowPublishModal(false)}
-                className="text-white/30 hover:text-white"
-              >
-                <FiX className="size-5" />
-              </button>
-            </div>
+      {/* Config dialog */}
+      {configId && configNode && configTool && (
+        <NodeConfigDialog
+          node={configNode} tool={configTool}
+          onClose={() => setConfigId(null)}
+          onUpdate={p => updateNode(configId, p)}
+          onRename={name => updateNodeName(configId, name)}
+          onDelete={() => { deleteNode(configId); setConfigId(null); }}
+        />
+      )}
 
-            {workflow.published ? (
-              <div className="mt-6">
-                <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4">
-                  <div className="flex items-center gap-2 text-emerald-400">
-                    <FiCheck className="size-4" />
-                    <p className="text-sm font-medium">Workflow Published!</p>
-                  </div>
-                  
-                  <div className="mt-4 space-y-3">
-                    <div>
-                      <p className="text-[10px] text-white/40">Webhook URL</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <code className="flex-1 truncate rounded bg-black/30 px-2 py-1.5 font-mono text-[10px] text-white/60">
-                          {webhookUrl}
-                        </code>
-                        <button
-                          onClick={copyWebhookUrl}
-                          className="rounded bg-white/[0.06] p-1.5 text-white/40 hover:bg-white/[0.1] hover:text-white"
-                        >
-                          {copiedWebhook ? <FiCheck className="size-3.5 text-emerald-400" /> : <FiCopy className="size-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] text-white/40">Webhook Key (Header: x-webhook-key)</p>
-                      <code className="mt-1 block rounded bg-black/30 px-2 py-1.5 font-mono text-[10px] text-white/60">
-                        {workflow.webhookKey || "(Key shown only once after publishing)"}
-                      </code>
-                    </div>
-
-                    <div>
-                      <p className="text-[10px] text-white/40">Runner</p>
-                      <p className="mt-1 text-xs text-white/60">
-                        {runners.find((r) => r.id === workflow.runnerId)?.name || "Unknown"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {workflow.webhookKey && workflow.webhookKey !== "(hidden)" && (
-                  <div className="mt-4 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
-                    <p className="mb-2 text-[10px] font-medium text-white/50">Example cURL</p>
-                    <code className="block whitespace-pre-wrap break-all rounded bg-black/30 p-2 font-mono text-[9px] text-white/50">
-{`curl -X POST \\
-  ${webhookUrl} \\
-  -H "x-webhook-key: ${workflow.webhookKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{}'`}
-                    </code>
-                  </div>
-                )}
-
-                <div className="mt-4 flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      // Allow republishing - reset published state temporarily
-                      setWorkflow((prev) => ({ ...prev, published: false }));
-                    }}
-                    className="h-10 flex-1 border-white/[0.08] text-sm text-white/50 hover:bg-white/[0.04] hover:text-white"
-                  >
-                    Republish
-                  </Button>
-                  <Button
-                    onClick={() => setShowPublishModal(false)}
-                    className="h-10 flex-1 bg-white text-sm text-black hover:bg-white/90"
-                  >
-                    Done
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="mt-6">
-                <div>
-                  <label className="mb-2 block text-xs text-white/40">
-                    <FiCpu className="mr-1 inline size-3" />
-                    Select Runner
-                  </label>
-                  <div className="space-y-2">
-                    {loadingRunners ? (
-                      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 text-center">
-                        <p className="text-xs text-white/30">Loading runners...</p>
-                      </div>
-                    ) : runners.filter(r => r.status === "online").length > 0 ? (
-                      runners.filter(r => r.status === "online").map((runner) => (
-                        <button
-                          key={runner.id}
-                          onClick={() => setSelectedRunnerId(runner.id)}
-                          className={`flex w-full items-center justify-between rounded-lg border p-3 text-left transition ${
-                            selectedRunnerId === runner.id
-                              ? "border-emerald-500/50 bg-emerald-500/10"
-                              : "border-white/[0.06] bg-white/[0.02] hover:border-white/10"
-                          }`}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="relative">
-                              <FiCpu className="size-4 text-white/40" />
-                              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-emerald-400" />
-                            </div>
-                            <div>
-                              <p className="text-xs text-white/70">{runner.name}</p>
-                              <p className="text-[10px] text-emerald-400/60">Connected</p>
-                            </div>
-                          </div>
-                          {selectedRunnerId === runner.id && (
-                            <FiCheck className="size-4 text-emerald-400" />
-                          )}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 text-center">
-                        <FiCpu className="mx-auto size-6 text-white/20" />
-                        <p className="mt-2 text-xs text-white/30">No runners connected</p>
-                        <p className="mt-1 text-[10px] text-white/20">
-                          Start a runner to publish this workflow
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-start gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3">
-                  <FiLock className="mt-0.5 size-4 shrink-0 text-yellow-500/60" />
-                  <p className="text-[10px] text-yellow-500/80">
-                    A secure webhook key will be generated. Include it in the <code className="rounded bg-black/20 px-1">x-webhook-key</code> header when triggering this workflow.
-                  </p>
-                </div>
-
-                <div className="mt-6 flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowPublishModal(false)}
-                    className="h-10 flex-1 border-white/[0.08] text-sm text-white/50 hover:bg-white/[0.04] hover:text-white"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    onClick={publishWorkflow}
-                    disabled={!selectedRunnerId || isPublishing}
-                    className="h-10 flex-1 bg-emerald-500 text-sm text-white hover:bg-emerald-600 disabled:opacity-50"
-                  >
-                    {isPublishing ? "Publishing..." : "Publish"}
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+      {/* Publish modal */}
+      {showPublish && (
+        <PublishModal
+          workflow={workflow} runners={runners} runnerId={runnerId ?? workflow.runnerId ?? null}
+          isPublishing={isPublishing} copiedHook={copiedHook} webhookUrl={webhookUrl}
+          onSelectRunner={setRunnerId}
+          onPublish={publishWorkflow}
+          onCopy={async () => { await navigator.clipboard.writeText(webhookUrl); setCopiedHook(true); setTimeout(() => setCopiedHook(false), 2000); }}
+          onRepublish={() => setWorkflow(w => ({ ...w, published: false }))}
+          onClose={() => setShowPublish(false)}
+        />
       )}
     </main>
   );
 }
 
-// ============ Helper Components ============
-
-function ParamInput({
-  param,
-  value,
-  onChange,
-}: {
-  param: ToolParam;
-  value: unknown;
-  onChange: (value: unknown) => void;
+// ─── NodeCard ─────────────────────────────────────────────────────────────────
+function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onMouseDown, onAdd }: {
+  node: WFNode; tool: ToolDef; selected: boolean; running: boolean; output: NodeOutput | null;
+  onSelect: () => void; onOpen: () => void; onMouseDown: (e: React.MouseEvent) => void;
+  onAdd: (x: number, y: number) => void;
 }) {
-  if (param.type === "coordinate") {
-    const coord = (value as [number, number]) || [0, 0];
-    return (
-      <div>
-        <label className="mb-1.5 block text-[10px] text-white/40">
-          {param.label}
-          {param.required && <span className="ml-1 text-red-400">*</span>}
-        </label>
-        <div className="flex gap-2">
-          <input
-            type="number"
-            value={coord[0]}
-            onChange={(e) => onChange([parseInt(e.target.value) || 0, coord[1]])}
-            placeholder="X"
-            className="w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs text-white/70 outline-none focus:border-white/20"
-          />
-          <input
-            type="number"
-            value={coord[1]}
-            onChange={(e) => onChange([coord[0], parseInt(e.target.value) || 0])}
-            placeholder="Y"
-            className="w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs text-white/70 outline-none focus:border-white/20"
-          />
+  const isAssert = tool.category === "assert";
+  const summary  = paramSummary(node, tool);
+  return (
+    <div
+      className="absolute group"
+      style={{ left: node.position.x, top: node.position.y, width: NODE_W }}
+      onClick={e => { e.stopPropagation(); onSelect(); }}
+      onDoubleClick={e => { e.stopPropagation(); onOpen(); }}
+      onMouseDown={onMouseDown}
+    >
+      {/* Input handle */}
+      {node.type !== "webhook_trigger" && (
+        <div className="absolute -left-2 top-1/2 -translate-y-1/2 size-3.5 rounded-full border-2 border-white/25 bg-[#0d0d0d] z-10" />
+      )}
+
+      {/* Card */}
+      <div className={`rounded-xl border bg-[#161616] cursor-move transition-all ${
+        selected ? "border-blue-500/50 shadow-md shadow-blue-500/10" : "border-white/[0.08] hover:border-white/[0.15]"
+      } ${isAssert ? "ring-1 ring-amber-500/30" : ""}`}>
+        {/* Header */}
+        <div className="flex items-center gap-2.5 px-3 py-2.5">
+          <div className={`shrink-0 rounded-lg p-1.5 ${tool.color}`}>
+            <tool.icon className="size-3 text-white" />
+          </div>
+          <span className="flex-1 truncate text-[11px] font-medium text-white/80">
+            {node.name || tool.name}
+          </span>
+          {/* Status dot */}
+          {running && <span className="size-2 rounded-full bg-blue-400 animate-pulse" />}
+          {!running && output && (
+            <span className={`size-2 rounded-full ${output.success ? "bg-emerald-400" : "bg-red-400"}`} />
+          )}
+          {/* Edit icon on hover */}
+          <button
+            onClick={e => { e.stopPropagation(); onOpen(); }}
+            className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-white transition-opacity"
+          >
+            <svg className="size-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
+        </div>
+        {/* Param summary */}
+        <div className="border-t border-white/[0.05] px-3 py-1.5">
+          <p className="truncate text-[9px] text-white/25">{summary}</p>
         </div>
       </div>
-    );
-  }
 
-  if (param.type === "select") {
-    return (
-      <div>
-        <label className="mb-1.5 block text-[10px] text-white/40">
-          {param.label}
-          {param.required && <span className="ml-1 text-red-400">*</span>}
-        </label>
-        <select
-          value={(value as string) || param.default || ""}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs text-white/70 outline-none focus:border-white/20"
+      {/* Output badge */}
+      {output && (
+        <div className={`mt-1.5 flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[9px] ${
+          output.success ? "bg-emerald-500/10 text-emerald-400/80" : "bg-red-500/10 text-red-400/80"
+        }`}>
+          <span>{output.success ? "✓" : "✗"}</span>
+          <span className="truncate flex-1">{
+            output.resultType === "image" ? "Screenshot captured" : output.text.slice(0, 55)
+          }</span>
+          <span className="shrink-0 tabular-nums text-white/20">{output.durationMs}ms</span>
+        </div>
+      )}
+      {running && (
+        <div className="mt-1.5 flex items-center gap-1.5 rounded-lg bg-blue-500/10 px-2.5 py-1 text-[9px] text-blue-400/70">
+          <span className="animate-pulse">●</span><span>Running…</span>
+        </div>
+      )}
+
+      {/* Output handle + add button */}
+      <div className="absolute -right-7 top-1/2 -translate-y-1/2 flex items-center gap-1 z-10">
+        <div className="size-3.5 rounded-full border-2 border-white/25 bg-[#0d0d0d]" />
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            const rect = (e.currentTarget.closest(".absolute") as HTMLElement)?.getBoundingClientRect();
+            const canvas = (e.currentTarget.closest("[class*='overflow-hidden']") as HTMLElement)?.getBoundingClientRect();
+            if (rect && canvas) onAdd(rect.right - canvas.left + 12, rect.top - canvas.top - 20);
+          }}
+          className="size-5 rounded-full border border-white/[0.12] bg-[#1a1a1a] text-white/30 hover:border-blue-500/50 hover:text-blue-400 flex items-center justify-center transition-colors"
+          title="Add node after (Tab)"
         >
-          <option value="">Select...</option>
-          {param.options?.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          <FiPlus className="size-2.5" />
+        </button>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
-  if (param.type === "number") {
-    return (
-      <div>
-        <label className="mb-1.5 block text-[10px] text-white/40">
-          {param.label}
-          {param.required && <span className="ml-1 text-red-400">*</span>}
-        </label>
-        <input
-          type="number"
-          value={(value as number) ?? param.default ?? ""}
-          onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
-          placeholder={param.placeholder}
-          className="w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs text-white/70 outline-none focus:border-white/20"
-        />
+// ─── NodeConfigDialog ─────────────────────────────────────────────────────────
+function NodeConfigDialog({ node, tool, onClose, onUpdate, onRename, onDelete }: {
+  node: WFNode; tool: ToolDef;
+  onClose: () => void; onUpdate: (p: Record<string, unknown>) => void;
+  onRename: (name: string) => void; onDelete: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="flex items-center gap-3 border-b border-white/[0.06] px-5 py-4">
+          <div className={`rounded-xl p-2.5 ${tool.color}`}>
+            <tool.icon className="size-4 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-white/90">{tool.name}</p>
+            <p className="text-[10px] text-white/30">{tool.description}</p>
+          </div>
+          <button onClick={onClose} className="text-white/25 hover:text-white p-1">
+            <FiX className="size-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="max-h-[60vh] overflow-y-auto px-5 py-4 space-y-4">
+          {/* Step name */}
+          <div>
+            <label className="mb-1.5 block text-[10px] text-white/35">Step Label</label>
+            <input
+              value={node.name ?? ""}
+              onChange={e => onRename(e.target.value)}
+              placeholder={tool.name}
+              className="w-full rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-2 text-xs text-white/70 outline-none focus:border-white/20"
+            />
+          </div>
+
+          {/* Assertion info */}
+          {tool.category === "assert" && (
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+              <p className="text-[10px] text-amber-400/80">
+                <strong>Checkpoint.</strong> Workflow stops here if the condition is not met.
+              </p>
+            </div>
+          )}
+
+          {/* Params */}
+          {node.type === "webhook_trigger" ? (
+            <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+              <p className="text-[10px] text-white/40">Triggered by HTTP POST to:</p>
+              <code className="mt-1.5 block break-all rounded bg-black/30 px-2 py-1.5 font-mono text-[10px] text-white/50">
+                POST /api/workflows/trigger/{node.id.slice(0,8)}…
+              </code>
+            </div>
+          ) : (
+            tool.params.map(param => (
+              <ParamInput key={param.name} param={param}
+                value={node.params[param.name]}
+                onChange={v => onUpdate({ [param.name]: v })}
+              />
+            ))
+          )}
+        </div>
+
+        {/* Footer */}
+        {node.type !== "webhook_trigger" && (
+          <div className="flex items-center justify-between border-t border-white/[0.06] px-5 py-3">
+            <button onClick={onDelete}
+              className="flex items-center gap-1.5 text-xs text-red-400/50 hover:text-red-400 transition-colors">
+              <FiTrash2 className="size-3.5" /> Delete step
+            </button>
+            <Button onClick={onClose} className="h-8 bg-white px-4 text-xs text-black hover:bg-white/90">
+              Done
+            </Button>
+          </div>
+        )}
       </div>
-    );
-  }
+    </div>
+  );
+}
 
+// ─── PublishModal ─────────────────────────────────────────────────────────────
+function PublishModal({ workflow, runners, runnerId, isPublishing, copiedHook, webhookUrl, onSelectRunner, onPublish, onCopy, onRepublish, onClose }: {
+  workflow: Workflow; runners: Runner[]; runnerId: string | null;
+  isPublishing: boolean; copiedHook: boolean; webhookUrl: string;
+  onSelectRunner: (id: string) => void; onPublish: () => void;
+  onCopy: () => void; onRepublish: () => void; onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+      onClick={onClose}>
+      <div className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#0a0a0a] p-6 shadow-2xl"
+        onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-emerald-500/20 p-2.5"><FiGlobe className="size-5 text-emerald-400" /></div>
+            <div>
+              <h2 className="text-base font-semibold text-white">Publish Workflow</h2>
+              <p className="text-[10px] text-white/30">Generate webhook · assign runner</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/25 hover:text-white"><FiX className="size-5" /></button>
+        </div>
+
+        {workflow.published ? (
+          <div className="space-y-4">
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <div className="flex items-center gap-2 text-emerald-400 mb-3"><FiCheck className="size-4" /><span className="text-sm font-medium">Published</span></div>
+              <p className="text-[10px] text-white/30 mb-1">Webhook URL</p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-black/30 px-2 py-1.5 font-mono text-[10px] text-white/50">{webhookUrl}</code>
+                <button onClick={onCopy} className="rounded bg-white/[0.06] p-1.5 text-white/30 hover:text-white">
+                  {copiedHook ? <FiCheck className="size-3.5 text-emerald-400" /> : <FiCopy className="size-3.5" />}
+                </button>
+              </div>
+              {workflow.webhookKey && workflow.webhookKey !== "(hidden)" && (
+                <>
+                  <p className="text-[10px] text-white/30 mt-3 mb-1">Webhook Key (x-webhook-key header)</p>
+                  <code className="block rounded bg-black/30 px-2 py-1.5 font-mono text-[10px] text-white/50">{workflow.webhookKey}</code>
+                </>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onRepublish} className="flex-1 h-9 border-white/[0.08] text-sm text-white/40 hover:text-white hover:bg-white/[0.04]">Republish</Button>
+              <Button onClick={onClose} className="flex-1 h-9 bg-white text-sm text-black hover:bg-white/90">Done</Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <p className="text-xs text-white/40 mb-2"><FiCpu className="inline mr-1 size-3" />Select Runner</p>
+              {runners.filter(r => r.status === "online").length === 0 ? (
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 text-center">
+                  <FiCpu className="mx-auto size-6 text-white/15 mb-2" />
+                  <p className="text-xs text-white/25">No runners connected</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {runners.filter(r => r.status === "online").map(r => (
+                    <button key={r.id} onClick={() => onSelectRunner(r.id)}
+                      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${runnerId === r.id ? "border-emerald-500/50 bg-emerald-500/10" : "border-white/[0.06] bg-white/[0.02] hover:border-white/10"}`}>
+                      <FiCpu className="size-4 text-white/40" />
+                      <div className="flex-1">
+                        <p className="text-xs text-white/70">{r.name}</p>
+                        <p className="text-[10px] text-emerald-400/60">Connected</p>
+                      </div>
+                      {runnerId === r.id && <FiCheck className="size-4 text-emerald-400" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/5 p-3 flex gap-2">
+              <FiLock className="size-4 shrink-0 text-yellow-500/50 mt-0.5" />
+              <p className="text-[10px] text-yellow-500/70">A secure webhook key is generated. Pass it as <code className="rounded bg-black/20 px-1">x-webhook-key</code> when triggering.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={onClose} className="flex-1 h-9 border-white/[0.08] text-sm text-white/40 hover:text-white hover:bg-white/[0.04]">Cancel</Button>
+              <Button onClick={onPublish} disabled={!runnerId || isPublishing} className="flex-1 h-9 bg-emerald-500 text-sm text-white hover:bg-emerald-600 disabled:opacity-40">
+                {isPublishing ? "Publishing…" : "Publish"}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── ParamInput ───────────────────────────────────────────────────────────────
+function ParamInput({ param, value, onChange }: { param: ToolParam; value: unknown; onChange: (v: unknown) => void }) {
+  const base = "w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs text-white/70 outline-none focus:border-white/20";
   return (
     <div>
-      <label className="mb-1.5 block text-[10px] text-white/40">
-        {param.label}
-        {param.required && <span className="ml-1 text-red-400">*</span>}
+      <label className="mb-1.5 block text-[10px] text-white/35">
+        {param.label}{param.required && <span className="ml-1 text-red-400">*</span>}
       </label>
-      <input
-        type="text"
-        value={(value as string) || ""}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={param.placeholder}
-        className="w-full rounded-lg border border-white/[0.07] bg-white/[0.02] px-3 py-2 text-xs text-white/70 outline-none focus:border-white/20"
-      />
+      {param.type === "coordinate" ? (
+        <div className="flex gap-2">
+          {["X","Y"].map((axis, i) => (
+            <input key={axis} type="number" placeholder={axis}
+              value={((value as [number,number]) ?? [0,0])[i]}
+              onChange={e => { const c = [...((value as [number,number]) ?? [0,0])] as [number,number]; c[i] = parseInt(e.target.value)||0; onChange(c); }}
+              className={base} />
+          ))}
+        </div>
+      ) : param.type === "select" ? (
+        <select value={(value as string) ?? param.default ?? ""} onChange={e => onChange(e.target.value)} className={base}>
+          <option value="">Select…</option>
+          {param.options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      ) : param.type === "number" ? (
+        <input type="number" value={(value as number) ?? param.default ?? ""} placeholder={param.placeholder}
+          onChange={e => onChange(parseFloat(e.target.value)||0)} className={base} />
+      ) : (
+        <input type="text" value={(value as string) ?? ""} placeholder={param.placeholder}
+          onChange={e => onChange(e.target.value)} className={base} />
+      )}
     </div>
   );
 }
