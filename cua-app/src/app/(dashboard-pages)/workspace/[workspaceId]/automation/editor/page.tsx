@@ -140,14 +140,16 @@ export default function WorkflowEditorPage() {
     origins: Record<string, { x: number; y: number }>; // node positions at drag start
   } | null>(null);
   const [dragCandidate, setDragCandidate] = useState<{ id: string; mx: number; my: number } | null>(null);
-  const DRAG_THRESHOLD = 5;
-  // marquee rubber-band selection
+  // prevent the canvas onClick from clearing selection after a marquee drag
+  const didMarquee  = useRef(false);
+  // drag-to-reorder: slot (array index) where the dragged node will land
+  const [reorderSlot, setReorderSlot] = useState<number | null>(null);
   // useRef = synchronous (no stale-closure problem across mouse events)
   // useState = drives the visual rectangle only
   const marqueeRef = useRef<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
   const [marquee,   setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
-  // prevent the canvas onClick from clearing selection after a marquee drag
-  const didMarquee  = useRef(false);
+  const DRAG_THRESHOLD = 5;
+  // marquee rubber-band selection
   const [selectedConn, setSelectedConn] = useState<number | null>(null); // index into nodes.slice(1)
 
   // load workflow
@@ -383,6 +385,26 @@ export default function WorkflowEditorPage() {
           return { ...n, position: { x: Math.max(0, o.x + dx), y: Math.max(0, o.y + dy) } };
         }),
       }));
+
+      // Compute reorder slot when dragging a single non-trigger node
+      if (dragging.ids.length === 1) {
+        const dragId   = dragging.ids[0];
+        const dragNode = workflow.nodes.find(n => n.id === dragId);
+        if (dragNode && dragNode.type !== "webhook_trigger") {
+          const dragCX = dragNode.position.x + NODE_W / 2;
+          // Other nodes in array order, excluding the one being dragged
+          const others = workflow.nodes.filter(n => n.id !== dragId);
+          // Find the slot: slot = index in `others` after which we insert
+          // (slot 1 = after trigger, slot others.length = at end)
+          let slot = 1;
+          for (let i = 1; i < others.length; i++) {
+            if (dragCX > others[i].position.x + NODE_W / 2) slot = i + 1;
+          }
+          setReorderSlot(slot);
+        }
+      } else {
+        setReorderSlot(null);
+      }
     }
 
     // Marquee — read from ref (always current, no stale-closure issue)
@@ -396,7 +418,21 @@ export default function WorkflowEditorPage() {
     }
   }
   function onCanvasMouseUp(e: React.MouseEvent) {
-    setDragging(null); setDragCandidate(null);
+    // Apply reorder if a single node was dragged to a new slot
+    if (dragging && dragging.ids.length === 1 && reorderSlot !== null) {
+      const dragId = dragging.ids[0];
+      setWorkflow(w => {
+        const nodes    = [...w.nodes];
+        const fromIdx  = nodes.findIndex(n => n.id === dragId);
+        if (fromIdx < 1) return w; // never move trigger
+        const [node]   = nodes.splice(fromIdx, 1);
+        // Adjust slot for the removed element
+        const insertAt = Math.max(1, reorderSlot > fromIdx ? reorderSlot - 1 : reorderSlot);
+        nodes.splice(insertAt, 0, node);
+        return { ...w, nodes };
+      });
+    }
+    setDragging(null); setDragCandidate(null); setReorderSlot(null);
     const m = marqueeRef.current;   // read from ref — always latest
     if (m) {
       const mx1 = Math.min(m.sx, m.ex), mx2 = Math.max(m.sx, m.ex);
@@ -475,7 +511,7 @@ export default function WorkflowEditorPage() {
         onMouseDown={onCanvasMouseDown}
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
-        onMouseLeave={() => { setDragging(null); setDragCandidate(null); marqueeRef.current = null; setMarquee(null); }}
+        onMouseLeave={() => { setDragging(null); setDragCandidate(null); marqueeRef.current = null; setMarquee(null); setReorderSlot(null); }}
         onWheel={e => {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
@@ -523,6 +559,27 @@ export default function WorkflowEditorPage() {
               </g>
             );
           })}
+
+          {/* Reorder drop indicator — blue vertical line at the target slot */}
+          {reorderSlot !== null && (() => {
+            const others = workflow.nodes.filter(n => dragging && !dragging.ids.includes(n.id));
+            const prev   = others[reorderSlot - 1];
+            const next   = others[reorderSlot];
+            if (!prev) return null;
+            // X = right edge of prev node (or midpoint between prev & next)
+            const x  = next
+              ? (prev.position.x + NODE_W + next.position.x) / 2
+              : prev.position.x + NODE_W + 40;
+            const y1 = Math.min(prev.position.y, next?.position.y ?? prev.position.y) - 16;
+            const y2 = Math.max(prev.position.y, next?.position.y ?? prev.position.y) + NODE_H + 16;
+            return (
+              <line
+                x1={x} y1={y1} x2={x} y2={y2}
+                stroke="rgba(59,130,246,0.8)" strokeWidth="2" strokeDasharray="4 3"
+                style={{ pointerEvents: "none" }}
+              />
+            );
+          })()}
         </svg>
 
         {/* Nodes */}
