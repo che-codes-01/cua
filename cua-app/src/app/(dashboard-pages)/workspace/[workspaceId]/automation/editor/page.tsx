@@ -404,7 +404,6 @@ export default function WorkflowEditorPage() {
       const my1 = Math.min(m.sy, m.ey), my2 = Math.max(m.sy, m.ey);
       if (mx2 - mx1 > 5 || my2 - my1 > 5) {
         const hit = workflow.nodes.filter(n =>
-          n.type !== "webhook_trigger" &&
           n.position.x < mx2 && n.position.x + NODE_W > mx1 &&
           n.position.y < my2 && n.position.y + NODE_H * 2 > my1
         );
