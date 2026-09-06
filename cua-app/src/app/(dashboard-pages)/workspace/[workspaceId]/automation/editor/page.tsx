@@ -142,7 +142,12 @@ export default function WorkflowEditorPage() {
   const [dragCandidate, setDragCandidate] = useState<{ id: string; mx: number; my: number } | null>(null);
   const DRAG_THRESHOLD = 5;
   // marquee rubber-band selection
-  const [marquee, setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+  // useRef = synchronous (no stale-closure problem across mouse events)
+  // useState = drives the visual rectangle only
+  const marqueeRef = useRef<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+  const [marquee,   setMarquee] = useState<{ sx: number; sy: number; ex: number; ey: number } | null>(null);
+  // prevent the canvas onClick from clearing selection after a marquee drag
+  const didMarquee  = useRef(false);
   const [selectedConn, setSelectedConn] = useState<number | null>(null); // index into nodes.slice(1)
 
   // load workflow
@@ -348,7 +353,10 @@ export default function WorkflowEditorPage() {
     if (!rect) return;
     const cx = (e.clientX - rect.left) / zoom;
     const cy = (e.clientY - rect.top)  / zoom;
-    setMarquee({ sx: cx, sy: cy, ex: cx, ey: cy });
+    const m = { sx: cx, sy: cy, ex: cx, ey: cy };
+    marqueeRef.current = m;   // sync — available immediately in next mousemove
+    setMarquee(m);            // async — drives the visual rect
+    didMarquee.current = false;
   }
   function onCanvasMouseMove(e: React.MouseEvent) {
     const rect = canvasRef.current?.getBoundingClientRect();
@@ -378,18 +386,22 @@ export default function WorkflowEditorPage() {
       }));
     }
 
-    // Marquee
-    if (marquee) {
+    // Marquee — read from ref (always current, no stale-closure issue)
+    if (marqueeRef.current) {
       const cx = (e.clientX - rect.left) / zoom;
       const cy = (e.clientY - rect.top)  / zoom;
-      setMarquee(m => m ? { ...m, ex: cx, ey: cy } : null);
+      const updated = { ...marqueeRef.current, ex: cx, ey: cy };
+      marqueeRef.current = updated;   // sync
+      setMarquee({ ...updated });     // trigger render for visual
+      didMarquee.current = true;
     }
   }
   function onCanvasMouseUp(e: React.MouseEvent) {
     setDragging(null); setDragCandidate(null);
-    if (marquee) {
-      const mx1 = Math.min(marquee.sx, marquee.ex), mx2 = Math.max(marquee.sx, marquee.ex);
-      const my1 = Math.min(marquee.sy, marquee.ey), my2 = Math.max(marquee.sy, marquee.ey);
+    const m = marqueeRef.current;   // read from ref — always latest
+    if (m) {
+      const mx1 = Math.min(m.sx, m.ex), mx2 = Math.max(m.sx, m.ex);
+      const my1 = Math.min(m.sy, m.ey), my2 = Math.max(m.sy, m.ey);
       if (mx2 - mx1 > 5 || my2 - my1 > 5) {
         const hit = workflow.nodes.filter(n =>
           n.type !== "webhook_trigger" &&
@@ -402,6 +414,7 @@ export default function WorkflowEditorPage() {
           return s;
         });
       }
+      marqueeRef.current = null;
       setMarquee(null);
     }
   }
@@ -456,11 +469,15 @@ export default function WorkflowEditorPage() {
         ref={canvasRef}
         className="relative flex-1 overflow-hidden bg-[#080808] select-none"
         style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: `${24 * zoom}px ${24 * zoom}px` }}
-        onClick={() => { setSelectedIds(new Set()); setAddMenu(null); setSelectedConn(null); }}
+        onClick={() => {
+          // don't clear selection if we just finished a marquee drag
+          if (didMarquee.current) { didMarquee.current = false; return; }
+          setSelectedIds(new Set()); setAddMenu(null); setSelectedConn(null);
+        }}
         onMouseDown={onCanvasMouseDown}
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
-        onMouseLeave={e => { setDragging(null); setDragCandidate(null); setMarquee(null); }}
+        onMouseLeave={() => { setDragging(null); setDragCandidate(null); marqueeRef.current = null; setMarquee(null); }}
         onWheel={e => {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
