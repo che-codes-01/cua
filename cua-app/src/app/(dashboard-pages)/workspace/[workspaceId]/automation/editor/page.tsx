@@ -4,7 +4,7 @@ import { useRouter, useSearchParams, useParams } from "next/navigation";
 import {
   FiArrowLeft, FiCheck, FiCheckCircle, FiCopy, FiGlobe, FiCpu, FiLock,
   FiMonitor, FiMousePointer, FiPlay, FiPlus, FiSave, FiShield, FiTrash2,
-  FiType, FiX, FiXCircle, FiZap, FiSearch, FiTerminal, FiMove,
+  FiType, FiX, FiXCircle, FiZap, FiSearch, FiTerminal, FiMove, FiHelpCircle,
 } from "react-icons/fi";
 import { Button } from "@/components/ui/button";
 
@@ -119,14 +119,18 @@ export default function WorkflowEditorPage() {
   const [configId,     setConfigId]     = useState<string | null>(null);
   const [addMenu,      setAddMenu]      = useState<{ afterId: string; x: number; y: number; search: string } | null>(null);
   const [showPublish,  setShowPublish]  = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
   const [runners,      setRunners]      = useState<Runner[]>([]);
   const [runnerId,     setRunnerId]     = useState<string | null>(null);
   const [isSaving,     setIsSaving]     = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [copiedHook,   setCopiedHook]   = useState(false);
   const [isLoading,    setIsLoading]    = useState(!!workflowId);
-  // drag
+  // drag — dragOrigin tracks mousedown position for the threshold check
   const [dragging,     setDragging]     = useState<{ id: string; ox: number; oy: number } | null>(null);
+  const [dragOrigin,   setDragOrigin]   = useState<{ id: string; cx: number; cy: number } | null>(null);
+  const DRAG_THRESHOLD = 5; // px before drag activates
+  const [selectedConn, setSelectedConn] = useState<number | null>(null); // index into nodes.slice(1)
 
   // load workflow
   useEffect(() => {
@@ -145,11 +149,29 @@ export default function WorkflowEditorPage() {
       const tag = (document.activeElement as HTMLElement)?.tagName;
       const inInput = tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
       if (!inInput) {
-        if (e.key === "Delete" || e.key === "Backspace") { if (selectedId) deleteNode(selectedId); }
-        if (e.key === "Escape") { setSelectedId(null); setConfigId(null); setAddMenu(null); }
+        if (e.key === "Delete" || e.key === "Backspace") {
+          if (selectedConn !== null) {
+            // delete the node that the selected connection leads INTO
+            const target = workflow.nodes[selectedConn + 1];
+            if (target) deleteNode(target.id);
+            setSelectedConn(null);
+          } else if (selectedId) {
+            deleteNode(selectedId);
+          }
+        }
+        if (e.key === "Escape") { setSelectedId(null); setConfigId(null); setAddMenu(null); setShowShortcuts(false); setSelectedConn(null); }
+        if (e.key === "n" || e.key === "N") {
+          e.preventDefault();
+          const lastNode = workflow.nodes[workflow.nodes.length - 1];
+          const rect = canvasRef.current?.getBoundingClientRect();
+          const cx = rect ? rect.width  / 2 - 104 : 300;
+          const cy = rect ? rect.height / 2 - 150 : 200;
+          setAddMenu({ afterId: lastNode.id, x: cx, y: cy, search: "" });
+        }
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); testRun(); }
+      if (e.key === "?" && !inInput) { e.preventDefault(); setShowShortcuts(s => !s); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -236,18 +258,44 @@ export default function WorkflowEditorPage() {
   // drag
   function onNodeMouseDown(e: React.MouseEvent, id: string) {
     e.stopPropagation();
-    const node = workflow.nodes.find(n => n.id === id);
-    if (!node) return;
-    setDragging({ id, ox: e.clientX - node.position.x, oy: e.clientY - node.position.y });
     setSelectedId(id);
+    // Record where the mousedown happened; actual drag starts only after threshold
+    setDragOrigin({ id, cx: e.clientX, cy: e.clientY });
   }
   function onCanvasMouseMove(e: React.MouseEvent) {
-    if (!dragging) return;
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    setWorkflow(w => ({ ...w, nodes: w.nodes.map(n => n.id === dragging.id ? { ...n, position: { x: Math.max(0, e.clientX - rect.left - dragging.ox + rect.left - rect.left), y: Math.max(0, e.clientY - rect.top - dragging.oy + rect.top - rect.top) } } : n) }));
+
+    // Activate drag once cursor moves past threshold
+    if (dragOrigin && !dragging) {
+      const dx = Math.abs(e.clientX - dragOrigin.cx);
+      const dy = Math.abs(e.clientY - dragOrigin.cy);
+      if (dx > DRAG_THRESHOLD || dy > DRAG_THRESHOLD) {
+        const node = workflow.nodes.find(n => n.id === dragOrigin.id);
+        if (node) {
+          // ox/oy = cursor offset from node's top-left, both in canvas-relative coords
+          setDragging({
+            id:  dragOrigin.id,
+            ox: dragOrigin.cx - rect.left - node.position.x,
+            oy: dragOrigin.cy - rect.top  - node.position.y,
+          });
+        }
+      }
+    }
+
+    if (!dragging) return;
+    setWorkflow(w => ({
+      ...w,
+      nodes: w.nodes.map(n => n.id === dragging.id ? {
+        ...n,
+        position: {
+          x: Math.max(0, e.clientX - rect.left - dragging.ox),
+          y: Math.max(0, e.clientY - rect.top  - dragging.oy),
+        },
+      } : n),
+    }));
   }
-  function onCanvasMouseUp() { setDragging(null); }
+  function onCanvasMouseUp() { setDragging(null); setDragOrigin(null); }
 
   const webhookUrl = typeof window !== "undefined" ? `${window.location.origin}/api/workflows/trigger/${workflow.id}` : "";
   const configNode = workflow.nodes.find(n => n.id === configId);
@@ -278,6 +326,13 @@ export default function WorkflowEditorPage() {
           <Button onClick={openPublish} className="h-8 bg-emerald-500 hover:bg-emerald-600 px-3 text-xs text-white">
             <FiGlobe className="mr-1.5 size-3" />Publish
           </Button>
+          <button
+            onClick={() => setShowShortcuts(true)}
+            title="Keyboard shortcuts (?)"
+            className="ml-1 flex size-8 items-center justify-center rounded-lg border border-white/[0.08] text-white/25 hover:border-white/20 hover:text-white/60 transition-colors"
+          >
+            <FiHelpCircle className="size-4" />
+          </button>
         </div>
       </header>
 
@@ -286,16 +341,19 @@ export default function WorkflowEditorPage() {
         ref={canvasRef}
         className="relative flex-1 overflow-hidden bg-[#080808] select-none"
         style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: "24px 24px" }}
-        onClick={() => { setSelectedId(null); setAddMenu(null); }}
+        onClick={() => { setSelectedId(null); setAddMenu(null); setSelectedConn(null); }}
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
         onMouseLeave={onCanvasMouseUp}
       >
-        {/* SVG connections */}
-        <svg className="pointer-events-none absolute inset-0 size-full overflow-visible">
+        {/* SVG connections — pointer-events on each path individually */}
+        <svg className="absolute inset-0 size-full overflow-visible" style={{ pointerEvents: "none" }}>
           <defs>
             <marker id="arrow" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
               <path d="M0,0 L0,6 L6,3 z" fill="rgba(255,255,255,0.15)" />
+            </marker>
+            <marker id="arrow-sel" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L6,3 z" fill="rgba(239,68,68,0.8)" />
             </marker>
           </defs>
           {workflow.nodes.slice(1).map((node, i) => {
@@ -303,12 +361,27 @@ export default function WorkflowEditorPage() {
             const sx = prev.position.x + NODE_W, sy = prev.position.y + NODE_H / 2;
             const ex = node.position.x,          ey = node.position.y + NODE_H / 2;
             const mx = (sx + ex) / 2;
+            const isSel = selectedConn === i;
             return (
-              <path key={node.id}
-                d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
-                fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.5"
-                markerEnd="url(#arrow)"
-              />
+              <g key={node.id} style={{ pointerEvents: "stroke" }}>
+                {/* Invisible fat hit-area path */}
+                <path
+                  d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
+                  fill="none" stroke="transparent" strokeWidth="12"
+                  style={{ pointerEvents: "stroke", cursor: "pointer" }}
+                  onClick={e => { e.stopPropagation(); setSelectedConn(isSel ? null : i); setSelectedId(null); }}
+                />
+                {/* Visible path */}
+                <path
+                  d={`M${sx},${sy} C${mx},${sy} ${mx},${ey} ${ex},${ey}`}
+                  fill="none"
+                  stroke={isSel ? "rgba(239,68,68,0.7)" : "rgba(255,255,255,0.12)"}
+                  strokeWidth={isSel ? 2 : 1.5}
+                  strokeDasharray={isSel ? "5 3" : undefined}
+                  markerEnd={isSel ? "url(#arrow-sel)" : "url(#arrow)"}
+                  style={{ pointerEvents: "none" }}
+                />
+              </g>
             );
           })}
         </svg>
@@ -414,6 +487,9 @@ export default function WorkflowEditorPage() {
           onClose={() => setShowPublish(false)}
         />
       )}
+
+      {/* Shortcuts dialog */}
+      {showShortcuts && <ShortcutsDialog onClose={() => setShowShortcuts(false)} />}
     </main>
   );
 }
@@ -710,5 +786,130 @@ function ParamInput({ param, value, onChange }: { param: ToolParam; value: unkno
           onChange={e => onChange(e.target.value)} className={base} />
       )}
     </div>
+  );
+}
+
+// ─── ShortcutsDialog ──────────────────────────────────────────────────────────
+const SHORTCUTS: { section: string; rows: { keys: string[]; description: string }[] }[] = [
+  {
+    section: "General",
+    rows: [
+      { keys: ["⌘", "S"],      description: "Save workflow" },
+      { keys: ["⌘", "↵"],      description: "Test Run — execute all steps on the connected runner" },
+      { keys: ["?"],            description: "Open / close this shortcuts dialog" },
+      { keys: ["Esc"],          description: "Deselect node · close dialogs · clear selection" },
+    ],
+  },
+  {
+    section: "Canvas",
+    rows: [
+      { keys: ["N"],            description: "Open add-node menu (adds after last node)" },
+      { keys: ["Right-click"],  description: "Open add-node menu at cursor position" },
+      { keys: ["+"],            description: "Add node after — click the + handle on any node" },
+    ],
+  },
+  {
+    section: "Node",
+    rows: [
+      { keys: ["Click"],        description: "Select node" },
+      { keys: ["Double-click"], description: "Open configuration dialog" },
+      { keys: ["Del", "⌫"],    description: "Delete selected node (not the trigger)" },
+      { keys: ["Drag"],         description: "Reposition node (activates after 5 px)" },
+    ],
+  },
+  {
+    section: "Connection",
+    rows: [
+      { keys: ["Click"],        description: "Select connection line (turns red + dashed)" },
+      { keys: ["Del", "⌫"],    description: "Delete selected connection's destination node" },
+      { keys: ["Esc"],          description: "Deselect connection" },
+    ],
+  },
+  {
+    section: "Configuration dialog",
+    rows: [
+      { keys: ["Esc"],          description: "Close dialog" },
+      { keys: ["Tab"],          description: "Move between fields" },
+    ],
+  },
+  {
+    section: "Add-node menu",
+    rows: [
+      { keys: ["Type"],         description: "Filter actions by name or description" },
+      { keys: ["Esc"],          description: "Close menu" },
+    ],
+  },
+];
+
+function ShortcutsDialog({ onClose }: { onClose: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-lg rounded-2xl border border-white/[0.08] bg-[#111] shadow-2xl overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-white/[0.06] p-2.5">
+              <FiHelpCircle className="size-4 text-white/50" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-white/90">Keyboard Shortcuts</p>
+              <p className="text-[10px] text-white/30">Press <Kbd>?</Kbd> anytime to toggle</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/25 hover:text-white p-1 transition-colors">
+            <FiX className="size-4" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="max-h-[70vh] overflow-y-auto px-5 py-4 space-y-5">
+          {SHORTCUTS.map(section => (
+            <div key={section.section}>
+              <p className="mb-2 font-mono text-[9px] uppercase tracking-widest text-white/25">
+                {section.section}
+              </p>
+              <div className="rounded-xl border border-white/[0.06] overflow-hidden">
+                {section.rows.map((row, i) => (
+                  <div
+                    key={i}
+                    className={`flex items-center justify-between px-4 py-2.5 ${
+                      i !== section.rows.length - 1 ? "border-b border-white/[0.04]" : ""
+                    }`}
+                  >
+                    <span className="text-[11px] text-white/50">{row.description}</span>
+                    <div className="flex items-center gap-1 shrink-0 ml-4">
+                      {row.keys.map((k, ki) => (
+                        <Kbd key={ki}>{k}</Kbd>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-white/[0.06] px-5 py-3 flex justify-end">
+          <Button onClick={onClose} className="h-8 bg-white px-5 text-xs text-black hover:bg-white/90">
+            Got it
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd className="inline-flex items-center justify-center rounded-md border border-white/[0.12] bg-white/[0.06] px-2 py-0.5 font-mono text-[10px] text-white/60 min-w-[1.5rem]">
+      {children}
+    </kbd>
   );
 }
