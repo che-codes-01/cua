@@ -5,6 +5,7 @@ import { useRouter, useSearchParams, useParams } from "next/navigation";
 import {
   FiArrowLeft,
   FiCheck,
+  FiCheckCircle,
   FiChevronDown,
   FiCopy,
   FiLink,
@@ -14,9 +15,11 @@ import {
   FiPlus,
   FiSave,
   FiSettings,
+  FiShield,
   FiTrash2,
   FiType,
   FiX,
+  FiXCircle,
   FiZap,
   FiGlobe,
   FiCpu,
@@ -42,7 +45,7 @@ type ToolDefinition = {
   name: string;
   description: string;
   icon: React.ElementType;
-  category: "trigger" | "mouse" | "keyboard" | "screen" | "utility";
+  category: "trigger" | "mouse" | "keyboard" | "screen" | "utility" | "assert";
   color: string;
   params: ToolParam[];
 };
@@ -230,6 +233,100 @@ const TOOLS: ToolDefinition[] = [
     color: "bg-yellow-500",
     params: [
       { name: "command", type: "string", label: "Command", required: true, placeholder: "ls -la" },
+    ],
+  },
+
+  // ── Assertion nodes — workflow checkpoints ──────────────────────────────────
+  // These stop the workflow with a clear error if the condition is not met.
+  {
+    type: "assert_text_visible",
+    name: "Assert Visible",
+    description: "Fail if text is not on screen",
+    icon: FiCheckCircle,
+    category: "assert",
+    color: "bg-amber-500",
+    params: [
+      {
+        name: "text",
+        type: "string",
+        label: "Expected text",
+        required: true,
+        placeholder: "Success, Submit, Error…",
+      },
+      {
+        name: "min_score",
+        type: "number",
+        label: "Min confidence (0–1)",
+        default: 0.7,
+      },
+      {
+        name: "message",
+        type: "string",
+        label: "Failure message (optional)",
+        placeholder: "Expected to see the confirmation dialog…",
+      },
+    ],
+  },
+  {
+    type: "assert_text_not_visible",
+    name: "Assert Not Visible",
+    description: "Fail if text IS on screen",
+    icon: FiXCircle,
+    category: "assert",
+    color: "bg-red-500",
+    params: [
+      {
+        name: "text",
+        type: "string",
+        label: "Text that must NOT appear",
+        required: true,
+        placeholder: "Error, Failed, Denied…",
+      },
+      {
+        name: "max_score",
+        type: "number",
+        label: "Max score before failing (0–1)",
+        default: 0.7,
+      },
+      {
+        name: "message",
+        type: "string",
+        label: "Failure message (optional)",
+        placeholder: "An error message appeared unexpectedly…",
+      },
+    ],
+  },
+  {
+    type: "assert_result_contains",
+    name: "Assert Output",
+    description: "Fail if previous step output is missing text",
+    icon: FiShield,
+    category: "assert",
+    color: "bg-violet-500",
+    params: [
+      {
+        name: "expected",
+        type: "string",
+        label: "Expected substring",
+        required: true,
+        placeholder: "exit code 0, true, OK…",
+      },
+      {
+        name: "case_sensitive",
+        type: "select",
+        label: "Case sensitive",
+        options: [
+          { value: "false", label: "No (default)" },
+          { value: "true",  label: "Yes" },
+        ],
+        default: "false",
+      },
+      {
+        name: "message",
+        type: "string",
+        label: "Failure message (optional)",
+        placeholder: "Command did not succeed…",
+      },
     ],
   },
 ];
@@ -679,6 +776,9 @@ export default function WorkflowEditorPage() {
                     selectedNodeId === node.id
                       ? "border-white/30 shadow-lg shadow-white/5"
                       : "border-white/[0.08] hover:border-white/20"
+                  } ${
+                    // Assertion checkpoints get a subtle amber ring
+                    tool.category === "assert" ? "ring-1 ring-amber-500/40" : ""
                   }`}
                 >
                   {/* Node header */}
@@ -692,12 +792,20 @@ export default function WorkflowEditorPage() {
                   {/* Node body */}
                   <div className="rounded-b-xl bg-[#111] px-3 py-2">
                     <p className="text-[9px] text-white/30">
-                      {node.name && node.name !== tool.name ? tool.name : 
-                        tool.params.length > 0
-                          ? `${tool.params.length} parameter${tool.params.length > 1 ? "s" : ""}`
-                          : tool.type === "webhook_trigger"
-                          ? "HTTP POST trigger"
-                          : "No parameters"}
+                      {tool.category === "assert"
+                        ? // Show what's being asserted directly on the card
+                          (node.params.text as string) ||
+                          (node.params.expected as string) ||
+                          "configure…"
+                        : node.name && node.name !== tool.name
+                        ? tool.name
+                        : tool.params.length > 0
+                        ? `${tool.params.length} parameter${
+                            tool.params.length > 1 ? "s" : ""
+                          }`
+                        : tool.type === "webhook_trigger"
+                        ? "HTTP POST trigger"
+                        : "No parameters"}
                     </p>
                   </div>
 
@@ -730,9 +838,17 @@ export default function WorkflowEditorPage() {
                 <p className="mb-2 px-3 font-mono text-[9px] uppercase tracking-wider text-white/20">
                   Add Node
                 </p>
-                {["mouse", "keyboard", "screen", "utility"].map((category) => (
+                {["mouse", "keyboard", "screen", "utility", "assert"].map((category) => (
                   <div key={category}>
-                    <p className="mt-2 px-3 text-[9px] capitalize text-white/30">{category}</p>
+                    {/* Divider before assert section */}
+                    {category === "assert" && (
+                      <div className="mx-3 my-2 border-t border-amber-500/20" />
+                    )}
+                    <p className={`mt-2 px-3 text-[9px] capitalize ${
+                      category === "assert" ? "text-amber-500/60" : "text-white/30"
+                    }`}>
+                      {category === "assert" ? "⚠️ Assertions" : category}
+                    </p>
                     {TOOLS.filter((t) => t.category === category).map((tool) => (
                       <button
                         key={tool.type}
@@ -821,6 +937,16 @@ export default function WorkflowEditorPage() {
                 </div>
               ) : (
                 <div className="space-y-4">
+                  {/* Assertion info banner */}
+                  {selectedTool.category === "assert" && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+                      <p className="text-[10px] text-amber-400/80">
+                        <strong>Checkpoint node.</strong> The workflow stops here and reports a
+                        failure if the condition is not met. Use these after actions to verify
+                        the screen is in the expected state.
+                      </p>
+                    </div>
+                  )}
                   <p className="font-mono text-[9px] uppercase tracking-wider text-white/20">
                     Parameters
                   </p>
