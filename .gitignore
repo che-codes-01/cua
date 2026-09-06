@@ -143,3 +143,4 @@ vite.config.ts.timestamp-*
 .vite/
 .vercel
 .env*
+packages/runner/scripts/__pycache__/
