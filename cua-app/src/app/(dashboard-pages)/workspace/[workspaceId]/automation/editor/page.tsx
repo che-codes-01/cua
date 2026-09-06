@@ -169,8 +169,7 @@ export default function WorkflowEditorPage() {
       if (!inInput) {
         if (e.key === "Delete" || e.key === "Backspace") {
           if (selectedConn !== null) {
-            const target = workflow.nodes[selectedConn + 1];
-            if (target) deleteNode(target.id);
+            // just deselect the connection — don't delete the node
             setSelectedConn(null);
           } else {
             workflow.nodes
@@ -1016,7 +1015,7 @@ const SHORTCUTS: { section: string; rows: { keys: string[]; description: string 
     section: "Connection",
     rows: [
       { keys: ["Click"],        description: "Select connection line (turns red + dashed)" },
-      { keys: ["Del", "⌫"],    description: "Delete selected connection's destination node" },
+      { keys: ["Del", "⌫"],    description: "Deselect connection (Esc also works)" },
       { keys: ["Esc"],          description: "Deselect connection" },
     ],
   },
