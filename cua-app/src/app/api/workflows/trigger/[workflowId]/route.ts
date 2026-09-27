@@ -81,17 +81,6 @@ export async function POST(
       // Empty body is fine
     }
 
-    // Create an execution record
-    const executionId = crypto.randomUUID();
-    await supabase.from("workflow_executions").insert({
-      id: executionId,
-      workflow_id: workflowId,
-      runner_id: runner.id,
-      status: "pending",
-      payload,
-      started_at: new Date().toISOString(),
-    });
-
     // Build the actions to execute in edge-defined order (skip the webhook trigger)
     const raw = workflow.nodes as { nodes: unknown[]; edges: { from: string; to: string }[] } | unknown[];
     const allNodes: { id: string; type: string; params: Record<string, unknown> }[] =
@@ -115,18 +104,60 @@ export async function POST(
       orderedNodes.push(...allNodes);
     }
 
-    const actions = orderedNodes
-      .filter(node => node.type !== "webhook_trigger")
-      .map(node => ({ type: node.type, ...node.params }));
+    const actionNodes = orderedNodes.filter(node => node.type !== "webhook_trigger");
+    const actions = actionNodes.map(node => ({ type: node.type, ...node.params }));
 
-    // TODO: Send actions to the runner via WebSocket service
-    // For now, we'll return the execution info
-    // In production, you'd send this to the service which forwards to the runner
+    // Create an execution record up front so it appears immediately in monitoring
+    const executionId = crypto.randomUUID();
+    const startedAt = new Date();
+    await supabase.from("workflow_executions").insert({
+      id: executionId,
+      workflow_id: workflowId,
+      runner_id: runner.id,
+      status: "running",
+      trigger_source: "webhook",
+      payload,
+      steps_total: actions.length,
+      steps_completed: 0,
+      started_at: startedAt.toISOString(),
+    });
+
+    // Build a step log entry for each action node
+    const buildLogs = (
+      results: unknown[],
+      failedAt: number | null,
+      failedMessage: string | null,
+    ) =>
+      actionNodes.map((node, i) => {
+        let status: "completed" | "failed" | "skipped";
+        let result: unknown = null;
+        let error: string | null = null;
+
+        if (failedAt !== null && i === failedAt) {
+          status = "failed";
+          error = failedMessage;
+        } else if (i < results.length) {
+          status = "completed";
+          result = results[i] ?? null;
+        } else {
+          status = "skipped";
+        }
+
+        return {
+          index: i,
+          node_id: node.id,
+          type: node.type,
+          params: node.params ?? {},
+          status,
+          result,
+          error,
+        };
+      });
 
     const serviceUrl = process.env.SERVICE_URL || "https://cua-service.vercel.app";
-    
+
     try {
-      // Call the service to execute the workflow
+      // Call the service to execute the workflow (blocks until all actions resolve)
       const executeRes = await fetch(`${serviceUrl}/api/execute`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -138,28 +169,79 @@ export async function POST(
         }),
       });
 
+      const data = await executeRes.json().catch(() => ({}));
+      const completedAt = new Date();
+      const durationMs = completedAt.getTime() - startedAt.getTime();
+
       if (!executeRes.ok) {
-        throw new Error("Failed to dispatch to runner");
+        // Partial results may be present up to the failing step
+        const results: unknown[] = Array.isArray(data.results) ? data.results : [];
+        const failedAt: number =
+          typeof data.failedAt === "number" ? data.failedAt : results.length;
+        const message: string =
+          data.message || data.error || "Execution failed on runner";
+        const logs = buildLogs(results, failedAt, message);
+
+        await supabase
+          .from("workflow_executions")
+          .update({
+            status: "failed",
+            error: message,
+            result: results,
+            logs,
+            steps_completed: results.length,
+            duration_ms: durationMs,
+            completed_at: completedAt.toISOString(),
+          })
+          .eq("id", executionId);
+
+        return NextResponse.json(
+          { error: message, executionId, failedAt },
+          { status: 502 }
+        );
       }
+
+      const results: unknown[] = Array.isArray(data.results) ? data.results : [];
+      const logs = buildLogs(results, null, null);
+
+      await supabase
+        .from("workflow_executions")
+        .update({
+          status: "completed",
+          result: results,
+          logs,
+          steps_completed: results.length,
+          duration_ms: durationMs,
+          completed_at: completedAt.toISOString(),
+        })
+        .eq("id", executionId);
 
       return NextResponse.json({
         success: true,
         executionId,
-        message: "Workflow triggered",
+        message: "Workflow executed",
         actionsCount: actions.length,
       });
     } catch (dispatchError) {
-      // Update execution status
+      const completedAt = new Date();
+      const message =
+        dispatchError instanceof Error
+          ? dispatchError.message
+          : "Failed to dispatch to runner";
+
       await supabase
         .from("workflow_executions")
-        .update({ status: "failed", error: "Failed to dispatch to runner" })
+        .update({
+          status: "failed",
+          error: message,
+          logs: buildLogs([], 0, message),
+          duration_ms: completedAt.getTime() - startedAt.getTime(),
+          completed_at: completedAt.toISOString(),
+        })
         .eq("id", executionId);
 
       return NextResponse.json(
-        { 
-          error: "Failed to dispatch workflow to runner",
-          executionId,
-        },
+        { error: "Failed to dispatch workflow to runner", executionId },
         { status: 500 }
       );
     }

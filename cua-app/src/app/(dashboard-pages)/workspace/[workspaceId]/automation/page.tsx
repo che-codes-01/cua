@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
+  FiActivity,
   FiArrowLeft,
   FiClock,
   FiCpu,
@@ -101,6 +102,11 @@ export default function WorkflowsListPage() {
     router.push(`/workspace/${workspaceId}/automation/editor?id=${workflowId}`);
   }
 
+  function viewLogs(workflowId?: string) {
+    const base = `/workspace/${workspaceId}/automation/executions`;
+    router.push(workflowId ? `${base}?workflowId=${workflowId}` : base);
+  }
+
   return (
     <main className="min-h-screen bg-[#080808] text-white">
       {/* Header */}
@@ -125,13 +131,23 @@ export default function WorkflowsListPage() {
           )}
         </div>
 
-        <Button
-          onClick={createNewWorkflow}
-          className="h-9 bg-white px-4 text-sm text-black hover:bg-white/90"
-        >
-          <FiPlus className="mr-2 size-4" />
-          New Workflow
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            onClick={() => viewLogs()}
+            className="h-9 border-white/[0.08] bg-white/[0.02] px-3 text-sm text-white/50 hover:bg-white/[0.05] hover:text-white"
+          >
+            <FiActivity className="mr-2 size-4" />
+            Monitor
+          </Button>
+          <Button
+            onClick={createNewWorkflow}
+            className="h-9 bg-white px-4 text-sm text-black hover:bg-white/90"
+          >
+            <FiPlus className="mr-2 size-4" />
+            New Workflow
+          </Button>
+        </div>
       </header>
 
       {/* Content */}
@@ -206,6 +222,13 @@ export default function WorkflowsListPage() {
                           >
                             <FiEdit2 className="size-3.5" />
                             Edit
+                          </button>
+                          <button
+                            onClick={() => viewLogs(workflow.id)}
+                            className="flex w-full items-center gap-2 px-3 py-2 text-xs text-white/60 hover:bg-white/[0.04] hover:text-white"
+                          >
+                            <FiActivity className="size-3.5" />
+                            View logs
                           </button>
                           <button
                             onClick={() => deleteWorkflow(workflow.id)}

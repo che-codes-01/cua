@@ -555,7 +555,9 @@ export default function DashboardPage() {
               />
             )}
 
-            {activeNav === "activity" && <ActivitySection />}
+            {activeNav === "activity" && (
+              <ActivitySection workspace={selectedWorkspace} />
+            )}
 
             {activeNav === "members" && <MembersSection />}
 
@@ -824,7 +826,7 @@ function OverviewSection({
           </div>
 
           <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0b0b0b] p-5 text-center text-[10px] text-white/20">
-            Activity tracking coming soon
+            View workflow executions in the Activity tab
           </div>
         </section>
 
@@ -997,27 +999,157 @@ function ApiKeysSection({
   );
 }
 
-function ActivitySection() {
+const ACTIVITY_STATUS_CLS: Record<string, string> = {
+  completed: "bg-emerald-500/10 text-emerald-400",
+  failed: "bg-red-500/10 text-red-400",
+  running: "bg-blue-500/10 text-blue-400",
+  pending: "bg-white/[0.06] text-white/40",
+};
+
+function activityDuration(ms: number | null) {
+  if (ms == null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  const s = ms / 1000;
+  return s < 60 ? `${s.toFixed(1)}s` : `${Math.floor(s / 60)}m ${Math.round(s % 60)}s`;
+}
+
+function activityTimeAgo(iso: string) {
+  const s = Math.floor((Date.now() - new Date(iso).getTime()) / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h ago` : new Date(iso).toLocaleDateString();
+}
+
+function ActivitySection({ workspace }: { workspace: Workspace | null }) {
+  const router = useRouter();
+  const [executions, setExecutions] = useState<
+    {
+      id: string;
+      workflow_name: string;
+      status: string;
+      trigger_source: string;
+      duration_ms: number | null;
+      steps_completed: number | null;
+      steps_total: number | null;
+      started_at: string;
+      runners: { name: string } | null;
+    }[]
+  >([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!workspace) return;
+    let active = true;
+    async function load() {
+      try {
+        const res = await fetch(
+          `/api/workflows/executions?workspaceId=${workspace!.id}&limit=15`
+        );
+        if (res.ok && active) {
+          const data = await res.json();
+          setExecutions(data.executions || []);
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    const interval = setInterval(load, 5000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [workspace?.id]);
+
   return (
     <>
-      <div className="mb-8">
-        <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
-          Activity
-        </h2>
-        <p className="mt-2 text-sm text-white/30">
-          Recent workspace events and logs
-        </p>
+      <div className="mb-8 flex items-end justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-[-0.04em] text-white">
+            Activity
+          </h2>
+          <p className="mt-2 text-sm text-white/30">
+            Recent workflow executions across this workspace
+          </p>
+        </div>
+        {workspace && (
+          <Button
+            variant="outline"
+            onClick={() =>
+              router.push(`/workspace/${workspace.id}/automation/executions`)
+            }
+            className="h-9 border-white/[0.08] bg-white/[0.02] px-3 text-[10px] text-white/40 hover:bg-white/[0.05] hover:text-white"
+          >
+            <FiActivity className="mr-2 size-3" />
+            Open monitor
+          </Button>
+        )}
       </div>
 
-      <div className="rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-5 py-12 text-center">
-        <FiActivity className="mx-auto size-8 text-white/10" />
-        <p className="mt-4 text-sm text-white/30">
-          Activity tracking coming soon
-        </p>
-        <p className="mt-2 text-xs text-white/20">
-          View command executions, runner connections, and more
-        </p>
-      </div>
+      {loading ? (
+        <div className="rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-5 py-12 text-center text-sm text-white/30">
+          Loading activity...
+        </div>
+      ) : executions.length === 0 ? (
+        <div className="rounded-xl border border-white/[0.07] bg-[#0b0b0b] px-5 py-12 text-center">
+          <FiActivity className="mx-auto size-8 text-white/10" />
+          <p className="mt-4 text-sm text-white/30">No executions yet</p>
+          <p className="mt-2 text-xs text-white/20">
+            Trigger a published workflow to see runs appear here
+          </p>
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-xl border border-white/[0.07] bg-[#0b0b0b]">
+          {executions.map((e, i) => (
+            <button
+              key={e.id}
+              onClick={() =>
+                workspace &&
+                router.push(
+                  `/workspace/${workspace.id}/automation/executions`
+                )
+              }
+              className={`flex w-full items-center gap-4 px-5 py-3.5 text-left transition hover:bg-white/[0.02] ${
+                i > 0 ? "border-t border-white/[0.05]" : ""
+              }`}
+            >
+              <span
+                className={`rounded-full px-2 py-1 text-[10px] font-medium ${
+                  ACTIVITY_STATUS_CLS[e.status] ?? ACTIVITY_STATUS_CLS.pending
+                }`}
+              >
+                {e.status}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm text-white/80">
+                  {e.workflow_name}
+                </div>
+                <div className="mt-0.5 flex items-center gap-3 text-[10px] text-white/30">
+                  <span>{activityTimeAgo(e.started_at)}</span>
+                  {e.runners && (
+                    <span className="flex items-center gap-1">
+                      <FiCpu className="size-3" />
+                      {e.runners.name}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="hidden text-right sm:block">
+                <div className="text-xs text-white/50">
+                  {e.steps_completed ?? 0}/{e.steps_total ?? 0} steps
+                </div>
+                <div className="mt-0.5 text-[10px] text-white/25">
+                  {activityDuration(e.duration_ms)}
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </>
   );
 }
