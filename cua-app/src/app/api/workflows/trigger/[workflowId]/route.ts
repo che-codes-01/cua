@@ -186,6 +186,7 @@ export async function POST(
         const failedNodeLabel = failedNode
           ? (failedNode as { name?: string }).name || failedNode.type
           : "unknown";
+        const failedNodeType = failedNode?.type ?? "unknown";
         const message: string =
           data.message || data.error || "Execution failed on runner";
         const logs = buildLogs(results, failedAt, message);
@@ -209,6 +210,7 @@ export async function POST(
             executionId,
             failedStep,
             failedNode: failedNodeLabel,
+            failedNodeType,
           },
           { status: 502 }
         );
