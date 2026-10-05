@@ -147,6 +147,8 @@ export async function POST(
           index: i,
           node_id: node.id,
           type: node.type,
+          label: (node as { name?: string }).name ||
+            node.type.split("_").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
           params: node.params ?? {},
           status,
           result,

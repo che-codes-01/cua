@@ -22,6 +22,7 @@ type StepLog = {
   index: number;
   node_id: string;
   type: string;
+  label?: string;
   params?: Record<string, unknown>;
   status: "completed" | "failed" | "skipped";
   result?: unknown;
@@ -562,7 +563,7 @@ function StepRow({ step }: { step: StepLog }) {
         </span>
         <StepIcon status={step.status} />
         <span className="flex-1 text-xs text-white/70">
-          {prettyType(step.type)}
+          {step.label ?? prettyType(step.type)}
         </span>
         <span
           className={`text-[10px] ${
