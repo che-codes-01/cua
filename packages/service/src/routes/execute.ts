@@ -41,7 +41,7 @@ export function executeRouter(hub: RunnerHub) {
               : String(prev);
           actionToSend = { ...action, previousResult };
         }
-        const result = await hub.sendAction(runnerId, actionToSend);
+        const result = await hub.sendAction(runnerId, actionToSend, executionId);
         results.push(result);
       }
 

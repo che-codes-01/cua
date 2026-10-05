@@ -248,12 +248,13 @@ export class RunnerHub {
   }
 
   /** Send an action to a runner and wait for the result (used by workflow execution) */
-  sendAction(runnerId: string, action: unknown): Promise<unknown> {
+  sendAction(runnerId: string, action: unknown, sessionId?: string): Promise<unknown> {
     const ws = this.connections.get(runnerId);
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       return Promise.reject(new Error('Runner is not connected'));
     }
     const actionId = randomUUID();
+    const effectiveSessionId = sessionId ?? `exec-${actionId}`;
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pendingActions.delete(actionId);
@@ -261,7 +262,7 @@ export class RunnerHub {
       }, ACTION_TIMEOUT_MS);
 
       this.pendingActions.set(actionId, { resolve, reject, timer });
-      this.send(ws, { type: 'action', actionId, payload: action });
+      this.send(ws, { type: 'action', actionId, sessionId: effectiveSessionId, payload: action });
     });
   }
 
