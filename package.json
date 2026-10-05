@@ -7,9 +7,12 @@
     "cua-app"
   ],
   "scripts": {
-    "runner:build": "npm run build -w packages/runner",
-    "runner:start": "npm start -w packages/runner",
-    "runner:dev": "npm run dev -w packages/runner",
-    "push-runner": "bash ./push-runner.sh"
+    "runner:build":   "npm run build -w packages/runner",
+    "runner:start":   "npm start -w packages/runner",
+    "runner:dev":     "npm run dev -w packages/runner",
+    "push-runner":    "bash ./push-runner.sh",
+    "record:build":   "npm run build -w packages/recorder",
+    "record:dev":     "npm run dev   -w packages/recorder",
+    "record":         "npm run build -w packages/recorder && node packages/recorder/dist/index.js"
   }
 }
