@@ -156,6 +156,25 @@ export default function WorkflowEditorPage() {
   const [drawingFrom,    setDrawingFrom]    = useState<string | null>(null);
   const [drawCursorPos,  setDrawCursorPos]  = useState<{ x: number; y: number } | null>(null);
 
+  // Attach a non-passive wheel listener to the canvas so we can call
+  // preventDefault() for pinch-to-zoom / ctrl+scroll without triggering
+  // the "Unable to preventDefault inside passive event listener" warning.
+  // React's synthetic onWheel is always passive in modern browsers.
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        applyZoom(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+      }
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  // applyZoom is stable (uses functional setState); zoom constants are module-level
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // load workflow
   useEffect(() => {
     if (!workflowId) { setIsLoading(false); return; }
@@ -562,12 +581,6 @@ export default function WorkflowEditorPage() {
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
         onMouseLeave={() => { setDragging(null); setDragCandidate(null); marqueeRef.current = null; setMarquee(null); setDrawingFrom(null); setDrawCursorPos(null); }}
-        onWheel={e => {
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            applyZoom(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
-          }
-        }}
       >
         {/* Zoomable layer */}
         <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: `${100 / zoom}%`, height: `${100 / zoom}%` }}>
