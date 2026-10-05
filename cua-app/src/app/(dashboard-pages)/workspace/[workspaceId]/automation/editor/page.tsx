@@ -287,33 +287,6 @@ export default function WorkflowEditorPage() {
         e.preventDefault();
         setSelectedIds(new Set(workflow.nodes.map(n => n.id))); // include trigger
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === "c") {
-        const toCopy = workflow.nodes.filter(n => selectedIds.has(n.id));
-        if (!toCopy.length) return;
-        // strip id (re-assigned on paste) + never copy secrets
-        const payload = JSON.stringify({
-          __cua_nodes__: true,
-          nodes: toCopy.map(({ id: _id, ...rest }) => rest),
-          // explicitly omit webhookKey and runnerId
-        });
-        navigator.clipboard.writeText(payload).catch(() => {});
-      }
-      if ((e.metaKey || e.ctrlKey) && e.key === "v" && !inInput) {
-        e.preventDefault();
-        navigator.clipboard.readText().then(text => {
-          try {
-            const data = JSON.parse(text);
-            if (!data.__cua_nodes__ || !Array.isArray(data.nodes)) return;
-            const offset = 40;
-            const pasted: WFNode[] = data.nodes.map((n: Omit<WFNode,"id">) => ({
-              ...n, id: crypto.randomUUID(),
-              position: { x: (n.position?.x ?? 100) + offset, y: (n.position?.y ?? 100) + offset },
-            }));
-            setWorkflow(w => ({ ...w, nodes: [...w.nodes, ...pasted] }));
-            setSelectedIds(new Set(pasted.map(n => n.id)));
-          } catch { /* not cua JSON */ }
-        }).catch(() => {});
-      }
       if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); save(); }
       if (e.key === "?" && !inInput) { e.preventDefault(); setShowShortcuts(s => !s); }
       if ((e.metaKey || e.ctrlKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); applyZoom(ZOOM_STEP); }
@@ -321,8 +294,48 @@ export default function WorkflowEditorPage() {
       if ((e.metaKey || e.ctrlKey) && e.key === "0") { e.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }); }
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "f" || e.key === "F")) { e.preventDefault(); fitView(); }
     };
+
+    // ── Copy: use the native copy event so no clipboard-read permission needed
+    const onCopy = (e: ClipboardEvent) => {
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return; // let the browser handle it
+      const toCopy = workflow.nodes.filter(n => selectedIds.has(n.id));
+      if (!toCopy.length) return;
+      e.preventDefault();
+      const payload = JSON.stringify({
+        __cua_nodes__: true,
+        nodes: toCopy.map(({ id: _id, ...rest }) => rest),
+      });
+      e.clipboardData?.setData("text/plain", payload);
+    };
+
+    // ── Paste: use the native paste event so no clipboard-read permission needed
+    const onPaste = (e: ClipboardEvent) => {
+      const tag = (document.activeElement as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return; // let the browser handle it
+      const text = e.clipboardData?.getData("text/plain") ?? "";
+      try {
+        const data = JSON.parse(text);
+        if (!data.__cua_nodes__ || !Array.isArray(data.nodes)) return;
+        e.preventDefault();
+        const offset = 40;
+        const pasted: WFNode[] = data.nodes.map((n: Omit<WFNode,"id">) => ({
+          ...n, id: crypto.randomUUID(),
+          position: { x: (n.position?.x ?? 100) + offset, y: (n.position?.y ?? 100) + offset },
+        }));
+        setWorkflow(w => ({ ...w, nodes: [...w.nodes, ...pasted] }));
+        setSelectedIds(new Set(pasted.map(n => n.id)));
+      } catch { /* not cua JSON */ }
+    };
+
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("copy",  onCopy);
+    window.addEventListener("paste", onPaste);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("copy",  onCopy);
+      window.removeEventListener("paste", onPaste);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedIds, selectedEdgeId, workflow]);
 
