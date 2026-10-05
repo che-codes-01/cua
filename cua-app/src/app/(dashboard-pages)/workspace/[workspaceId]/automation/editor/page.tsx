@@ -283,7 +283,7 @@ export default function WorkflowEditorPage() {
           setAddMenu({ afterId: lastNode.id, x: 0, y: 0, search: "" });
         }
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === "a") {
+      if ((e.metaKey || e.ctrlKey) && e.key === "a" && !inInput) {
         e.preventDefault();
         setSelectedIds(new Set(workflow.nodes.map(n => n.id))); // include trigger
       }
@@ -1094,7 +1094,7 @@ function NodeConfigDialog({ node, tool, onClose, onUpdate, onRename, onDelete }:
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
       onClick={onClose}
-      onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } }}
+      onKeyDown={e => { e.stopPropagation(); if (e.key === "Escape") { onClose(); } }}
     >
       <div ref={dialogRef} className="w-full max-w-md rounded-2xl border border-white/[0.08] bg-[#111] shadow-2xl overflow-hidden"
         onClick={e => e.stopPropagation()}>

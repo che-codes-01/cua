@@ -255,7 +255,12 @@ export default function WorkflowsListPage() {
                 <div className="mt-3 flex items-center gap-4 text-[10px] text-white/30">
                   <span className="flex items-center gap-1">
                     <FiZap className="size-3" />
-                    {(workflow.nodes?.length || 1) - 1} steps
+                    {(() => {
+                      const nodeCount = Array.isArray(workflow.nodes)
+                        ? workflow.nodes.length
+                        : (workflow.nodes as { nodes?: unknown[] } | null)?.nodes?.length ?? 0;
+                      return nodeCount > 0 ? nodeCount - 1 : 0;
+                    })()} steps
                   </span>
                   {workflow.runners && (
                     <span className="flex items-center gap-1">
