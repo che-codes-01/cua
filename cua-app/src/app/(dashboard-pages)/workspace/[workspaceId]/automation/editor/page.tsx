@@ -389,22 +389,82 @@ export default function WorkflowEditorPage() {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
     a.download = `${workflow.name.replace(/\s+/g, "-")}.json`; a.click();
   }
-  function importFromClipboard() {
-    navigator.clipboard.readText().then(text => {
-      try {
-        const data = JSON.parse(text);
-        const nodes: Omit<WFNode,"id">[] = data.__cua_nodes__ ? data.nodes : data;
-        if (!Array.isArray(nodes)) return;
-        const imported: WFNode[] = nodes.map((n: Omit<WFNode,"id">) => ({ ...n, id: crypto.randomUUID() }));
+  function importWorkflow(text: string) {
+    try {
+      const data = JSON.parse(text);
+
+      // Format 1: recorder output  { __cua_workflow__: true, nodes: { nodes, edges } }
+      if (data.__cua_workflow__ && data.nodes && !Array.isArray(data.nodes)) {
+        const rawNodes: WFNode[] = data.nodes.nodes ?? [];
+        const rawEdges: WFEdge[] = data.nodes.edges ?? [];
+        // Re-map IDs so they're fresh and edges stay consistent
+        const idMap = new Map<string, string>();
+        const importedNodes: WFNode[] = rawNodes.map((n: WFNode) => {
+          const newId = crypto.randomUUID();
+          idMap.set(n.id, newId);
+          return { ...n, id: newId };
+        });
+        const importedEdges: WFEdge[] = rawEdges.map((e: WFEdge) => ({
+          id: crypto.randomUUID(),
+          from: idMap.get(e.from) ?? e.from,
+          to:   idMap.get(e.to)   ?? e.to,
+        }));
+        const hasTrigger = importedNodes.some(n => n.type === "webhook_trigger");
+        if (hasTrigger) {
+          setWorkflow(w => ({ ...w, name: data.name ?? w.name, nodes: importedNodes, edges: importedEdges }));
+        } else {
+          setWorkflow(w => ({ ...w, nodes: [...w.nodes, ...importedNodes], edges: [...w.edges, ...importedEdges] }));
+        }
+        setSelectedIds(new Set(importedNodes.map(n => n.id)));
+        return;
+      }
+
+      // Format 2: editor export  { __cua_nodes__: true, nodes: [...] }
+      if (data.__cua_nodes__) {
+        const rawNodes: Omit<WFNode,"id">[] = data.nodes ?? [];
+        if (!Array.isArray(rawNodes)) return;
+        const imported: WFNode[] = rawNodes.map((n: Omit<WFNode,"id">) => ({ ...n, id: crypto.randomUUID() }));
         const hasTrigger = imported.some(n => n.type === "webhook_trigger");
         if (hasTrigger) {
-          setWorkflow(w => ({ ...w, nodes: imported }));
+          setWorkflow(w => ({ ...w, nodes: imported, edges: [] }));
         } else {
           setWorkflow(w => ({ ...w, nodes: [...w.nodes, ...imported] }));
         }
         setSelectedIds(new Set(imported.map(n => n.id)));
-      } catch { alert("Clipboard does not contain valid workflow JSON"); }
-    }).catch(() => alert("Could not read clipboard"));
+        return;
+      }
+
+      // Format 3: raw array of nodes
+      if (Array.isArray(data)) {
+        const imported: WFNode[] = data.map((n: Omit<WFNode,"id">) => ({ ...n, id: crypto.randomUUID() }));
+        const hasTrigger = imported.some(n => n.type === "webhook_trigger");
+        if (hasTrigger) {
+          setWorkflow(w => ({ ...w, nodes: imported, edges: [] }));
+        } else {
+          setWorkflow(w => ({ ...w, nodes: [...w.nodes, ...imported] }));
+        }
+        setSelectedIds(new Set(imported.map(n => n.id)));
+        return;
+      }
+
+      alert("Unrecognised workflow JSON format");
+    } catch {
+      alert("File does not contain valid workflow JSON");
+    }
+  }
+
+  function importFromFile() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => importWorkflow(e.target?.result as string);
+      reader.readAsText(file);
+    };
+    input.click();
   }
 
   async function save() {
@@ -634,7 +694,7 @@ export default function WorkflowEditorPage() {
           <Button variant="outline" onClick={exportWorkflow} title="Export workflow JSON" className="h-8 border-white/[0.08] px-3 text-xs text-white/40 hover:text-white hover:bg-white/[0.04]">
             Export
           </Button>
-          <Button variant="outline" onClick={importFromClipboard} title="Import from clipboard (paste workflow JSON)" className="h-8 border-white/[0.08] px-3 text-xs text-white/40 hover:text-white hover:bg-white/[0.04]">
+          <Button variant="outline" onClick={importFromFile} title="Import workflow JSON from file" className="h-8 border-white/[0.08] px-3 text-xs text-white/40 hover:text-white hover:bg-white/[0.04]">
             Import
           </Button>
           <Button onClick={openPublish} className="h-8 bg-emerald-500 hover:bg-emerald-600 px-3 text-xs text-white">
