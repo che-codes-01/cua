@@ -1,0 +1,3 @@
+node_modules/
+*.tsbuildinfo
+# dist/ is intentionally committed so `npx github:che-codes-01/cua-recorder` works
