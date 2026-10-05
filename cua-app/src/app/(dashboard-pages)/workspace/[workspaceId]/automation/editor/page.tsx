@@ -131,11 +131,38 @@ export default function WorkflowEditorPage() {
   const [isPublishing, setIsPublishing] = useState(false);
   const [copiedHook,   setCopiedHook]   = useState(false);
   const [isLoading,    setIsLoading]    = useState(!!workflowId);
-  // canvas zoom
+  // canvas zoom + pan
   const [zoom,         setZoom]         = useState(1);
+  const [pan,          setPan]          = useState({ x: 0, y: 0 });
   const MIN_ZOOM = 0.3, MAX_ZOOM = 2, ZOOM_STEP = 0.1;
+  // refs for pan interaction — avoid stale closures inside event handlers
+  const isPanningRef   = useRef(false);
+  const panStartRef    = useRef({ mx: 0, my: 0, px: 0, py: 0 });
+  const spaceHeldRef   = useRef(false);
+  const [spaceHeld,    setSpaceHeld]    = useState(false); // drives cursor CSS only
+  // keep a ref to current zoom so the wheel handler can read it without recreating
+  const zoomRef = useRef(zoom);
+  useEffect(() => { zoomRef.current = zoom; }, [zoom]);
+  const panRef = useRef(pan);
+  useEffect(() => { panRef.current = pan; }, [pan]);
   function applyZoom(delta: number) {
     setZoom(z => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round((z + delta) * 10) / 10)));
+  }
+  function fitView() {
+    if (!workflow.nodes.length) return;
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const xs = workflow.nodes.map(n => n.position.x);
+    const ys = workflow.nodes.map(n => n.position.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs) + NODE_W;
+    const minY = Math.min(...ys), maxY = Math.max(...ys) + NODE_H * 2;
+    const padding = 60;
+    const scaleX = (rect.width  - padding * 2) / (maxX - minX || 1);
+    const scaleY = (rect.height - padding * 2) / (maxY - minY || 1);
+    const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.min(scaleX, scaleY)));
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    setPan({ x: rect.width  / 2 - cx * newZoom, y: rect.height / 2 - cy * newZoom });
+    setZoom(newZoom);
   }
   // drag — delta-based so multi-node drag works correctly
   const [dragging, setDragging] = useState<{
@@ -156,22 +183,58 @@ export default function WorkflowEditorPage() {
   const [drawingFrom,    setDrawingFrom]    = useState<string | null>(null);
   const [drawCursorPos,  setDrawCursorPos]  = useState<{ x: number; y: number } | null>(null);
 
-  // Attach a non-passive wheel listener to the canvas so we can call
-  // preventDefault() for pinch-to-zoom / ctrl+scroll without triggering
-  // the "Unable to preventDefault inside passive event listener" warning.
-  // React's synthetic onWheel is always passive in modern browsers.
+  // Space keydown/up — toggle pan-mode cursor
+  useEffect(() => {
+    const onDown = (e: KeyboardEvent) => {
+      if (e.code === 'Space' && !e.repeat) {
+        const tag = (document.activeElement as HTMLElement)?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+        e.preventDefault();
+        spaceHeldRef.current = true;
+        setSpaceHeld(true);
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      if (e.code === 'Space') {
+        spaceHeldRef.current = false;
+        setSpaceHeld(false);
+        isPanningRef.current = false;
+      }
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup',   onUp);
+    return () => { window.removeEventListener('keydown', onDown); window.removeEventListener('keyup', onUp); };
+  }, []);
+
+  // Non-passive wheel: Ctrl+scroll zooms toward cursor; plain scroll pans
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
       if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        applyZoom(e.deltaY < 0 ? ZOOM_STEP : -ZOOM_STEP);
+        // Zoom toward the cursor position
+        const rect = el.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        const oldZoom = zoomRef.current;
+        const rawNew  = oldZoom * (e.deltaY < 0 ? 1.1 : 0.9);
+        const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, Math.round(rawNew * 100) / 100));
+        // Adjust pan so the point under the cursor stays fixed
+        setPan(p => ({
+          x: mouseX - (mouseX - p.x) * (newZoom / oldZoom),
+          y: mouseY - (mouseY - p.y) * (newZoom / oldZoom),
+        }));
+        setZoom(newZoom);
+      } else {
+        // Pan — plain scroll = vertical, shift+scroll = horizontal
+        const dx = e.shiftKey ? -e.deltaY : -e.deltaX;
+        const dy = e.shiftKey ?          0 : -e.deltaY;
+        setPan(p => ({ x: p.x + dx, y: p.y + dy }));
       }
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  // applyZoom is stable (uses functional setState); zoom constants are module-level
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -255,7 +318,8 @@ export default function WorkflowEditorPage() {
       if (e.key === "?" && !inInput) { e.preventDefault(); setShowShortcuts(s => !s); }
       if ((e.metaKey || e.ctrlKey) && (e.key === "+" || e.key === "=")) { e.preventDefault(); applyZoom(ZOOM_STEP); }
       if ((e.metaKey || e.ctrlKey) && e.key === "-") { e.preventDefault(); applyZoom(-ZOOM_STEP); }
-      if ((e.metaKey || e.ctrlKey) && e.key === "0") { e.preventDefault(); setZoom(1); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "0") { e.preventDefault(); setZoom(1); setPan({ x: 0, y: 0 }); }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === "f" || e.key === "F")) { e.preventDefault(); fitView(); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -443,13 +507,23 @@ export default function WorkflowEditorPage() {
     }
     setDragCandidate({ id, mx: e.clientX, my: e.clientY });
   }
+  function startPan(mx: number, my: number) {
+    isPanningRef.current = true;
+    panStartRef.current  = { mx, my, px: panRef.current.x, py: panRef.current.y };
+  }
   function onCanvasMouseDown(e: React.MouseEvent) {
     if ((e.target as HTMLElement).closest("[data-node]")) return;
+    // Middle mouse button OR Space+LMB → pan
+    if (e.button === 1 || (e.button === 0 && spaceHeldRef.current)) {
+      e.preventDefault();
+      startPan(e.clientX, e.clientY);
+      return;
+    }
     if (!e.shiftKey) setSelectedIds(new Set());
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const cx = (e.clientX - rect.left) / zoom;
-    const cy = (e.clientY - rect.top)  / zoom;
+    const cx = (e.clientX - rect.left - panRef.current.x) / zoom;
+    const cy = (e.clientY - rect.top  - panRef.current.y) / zoom;
     const m = { sx: cx, sy: cy, ex: cx, ey: cy };
     marqueeRef.current = m;   // sync — available immediately in next mousemove
     setMarquee(m);            // async — drives the visual rect
@@ -459,11 +533,18 @@ export default function WorkflowEditorPage() {
     const rect = canvasRef.current?.getBoundingClientRect();
     if (!rect) return;
 
+    // Pan mode
+    if (isPanningRef.current) {
+      const { mx, my, px, py } = panStartRef.current;
+      setPan({ x: px + (e.clientX - mx), y: py + (e.clientY - my) });
+      return;
+    }
+
     // Track cursor for connection drawing
     if (drawingFrom) {
       setDrawCursorPos({
-        x: (e.clientX - rect.left) / zoom,
-        y: (e.clientY - rect.top)  / zoom,
+        x: (e.clientX - rect.left - panRef.current.x) / zoom,
+        y: (e.clientY - rect.top  - panRef.current.y) / zoom,
       });
     }
 
@@ -493,8 +574,8 @@ export default function WorkflowEditorPage() {
 
     // Marquee — read from ref (always current, no stale-closure issue)
     if (marqueeRef.current) {
-      const cx = (e.clientX - rect.left) / zoom;
-      const cy = (e.clientY - rect.top)  / zoom;
+      const cx = (e.clientX - rect.left - panRef.current.x) / zoom;
+      const cy = (e.clientY - rect.top  - panRef.current.y) / zoom;
       const updated = { ...marqueeRef.current, ex: cx, ey: cy };
       marqueeRef.current = updated;   // sync
       setMarquee({ ...updated });     // trigger render for visual
@@ -502,6 +583,8 @@ export default function WorkflowEditorPage() {
     }
   }
   function onCanvasMouseUp(e: React.MouseEvent) {
+    // Stop panning
+    isPanningRef.current = false;
     // Cancel connection drawing if released on canvas (not on a handle)
     if (drawingFrom) { setDrawingFrom(null); setDrawCursorPos(null); }
     setDragging(null); setDragCandidate(null);
@@ -571,7 +654,12 @@ export default function WorkflowEditorPage() {
       <div
         ref={canvasRef}
         className="relative flex-1 overflow-hidden bg-[#080808] select-none"
-        style={{ backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: `${24 * zoom}px ${24 * zoom}px` }}
+        style={{
+          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.025) 1px, transparent 1px)",
+          backgroundSize: `${24 * zoom}px ${24 * zoom}px`,
+          backgroundPosition: `${pan.x % (24 * zoom)}px ${pan.y % (24 * zoom)}px`,
+          cursor: spaceHeld ? (isPanningRef.current ? 'grabbing' : 'grab') : 'default',
+        }}
         onClick={() => {
           // don't clear selection if we just finished a marquee drag
           if (didMarquee.current) { didMarquee.current = false; return; }
@@ -580,10 +668,10 @@ export default function WorkflowEditorPage() {
         onMouseDown={onCanvasMouseDown}
         onMouseMove={onCanvasMouseMove}
         onMouseUp={onCanvasMouseUp}
-        onMouseLeave={() => { setDragging(null); setDragCandidate(null); marqueeRef.current = null; setMarquee(null); setDrawingFrom(null); setDrawCursorPos(null); }}
+        onMouseLeave={() => { isPanningRef.current = false; setDragging(null); setDragCandidate(null); marqueeRef.current = null; setMarquee(null); setDrawingFrom(null); setDrawCursorPos(null); }}
       >
-        {/* Zoomable layer */}
-        <div style={{ transform: `scale(${zoom})`, transformOrigin: "top left", width: `${100 / zoom}%`, height: `${100 / zoom}%` }}>
+        {/* Zoomable + pannable layer */}
+        <div style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`, transformOrigin: "top left", width: `${100 / zoom}%`, height: `${100 / zoom}%` }}>
         {/* SVG connections — drawn from explicit edges */}
         <svg className="absolute inset-0 size-full overflow-visible" style={{ pointerEvents: "none" }}>
           <defs>
@@ -688,8 +776,8 @@ export default function WorkflowEditorPage() {
 
         {/* Marquee selection rectangle */}
         {marquee && (() => {
-          const x = Math.min(marquee.sx, marquee.ex) * zoom;
-          const y = Math.min(marquee.sy, marquee.ey) * zoom;
+          const x = Math.min(marquee.sx, marquee.ex) * zoom + pan.x;
+          const y = Math.min(marquee.sy, marquee.ey) * zoom + pan.y;
           const w = Math.abs(marquee.ex - marquee.sx) * zoom;
           const h = Math.abs(marquee.ey - marquee.sy) * zoom;
           return (
@@ -698,12 +786,20 @@ export default function WorkflowEditorPage() {
           );
         })()}
 
-        {/* Zoom controls */}
+        {/* Zoom + pan controls HUD */}
         <div className="absolute bottom-4 right-4 z-30 flex items-center gap-1 rounded-lg border border-white/[0.08] bg-[#111]/90 px-2 py-1 backdrop-blur-sm">
-          <button onClick={() => applyZoom(-ZOOM_STEP)} className="flex size-6 items-center justify-center rounded text-white/40 hover:bg-white/[0.06] hover:text-white transition-colors text-sm">−</button>
-          <button onClick={() => setZoom(1)} className="px-2 text-[10px] tabular-nums text-white/30 hover:text-white transition-colors min-w-[3rem] text-center">{Math.round(zoom * 100)}%</button>
-          <button onClick={() => applyZoom(ZOOM_STEP)}  className="flex size-6 items-center justify-center rounded text-white/40 hover:bg-white/[0.06] hover:text-white transition-colors text-sm">+</button>
+          <button onClick={() => applyZoom(-ZOOM_STEP)} title="Zoom out (⌘-)" className="flex size-6 items-center justify-center rounded text-white/40 hover:bg-white/[0.06] hover:text-white transition-colors text-sm">−</button>
+          <button onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); }} title="Reset zoom & pan" className="px-2 text-[10px] tabular-nums text-white/30 hover:text-white transition-colors min-w-[3rem] text-center">{Math.round(zoom * 100)}%</button>
+          <button onClick={() => applyZoom(ZOOM_STEP)}  title="Zoom in (⌘+)"  className="flex size-6 items-center justify-center rounded text-white/40 hover:bg-white/[0.06] hover:text-white transition-colors text-sm">+</button>
+          <div className="mx-1 h-3 w-px bg-white/[0.08]" />
+          <button onClick={fitView} title="Fit all nodes in view" className="px-2 text-[10px] text-white/30 hover:text-white transition-colors">Fit</button>
         </div>
+        {/* Pan mode hint */}
+        {spaceHeld && (
+          <div className="pointer-events-none absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-md border border-white/[0.08] bg-[#111]/90 px-3 py-1 text-[10px] text-white/40 backdrop-blur-sm">
+            Pan mode — drag to move canvas
+          </div>
+        )}
 
         {/* Add-node menu — fixed + centered, Esc closes it */}
         {addMenu && (
@@ -1168,8 +1264,13 @@ const SHORTCUTS: { section: string; rows: { keys: string[]; description: string 
       { keys: ["+"],            description: "Add node after — click the + handle on any node" },
       { keys: ["⌘", "+"],       description: "Zoom in" },
       { keys: ["⌘", "-"],       description: "Zoom out" },
-      { keys: ["⌘", "0"],       description: "Reset zoom to 100%" },
-      { keys: ["Ctrl+Wheel"],   description: "Pinch-to-zoom with trackpad / mouse wheel" },
+      { keys: ["⌘", "0"],       description: "Reset zoom to 100% + reset pan" },
+      { keys: ["Ctrl+Wheel"],   description: "Zoom toward cursor (pinch-to-zoom / mouse wheel)" },
+      { keys: ["Scroll"],       description: "Pan canvas vertically" },
+      { keys: ["Shift", "Scroll"], description: "Pan canvas horizontally" },
+      { keys: ["Space", "Drag"], description: "Pan canvas (hold Space + drag)" },
+      { keys: ["Middle-drag"],  description: "Pan canvas (middle mouse button drag)" },
+      { keys: ["⌘", "⇧", "F"],  description: "Fit all nodes in view" },
     ],
   },
   {
