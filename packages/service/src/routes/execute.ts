@@ -43,6 +43,8 @@ export function executeRouter(hub: RunnerHub) {
         }
         const result = await hub.sendAction(runnerId, actionToSend, executionId);
         results.push(result);
+        // Small inter-action pause so the OS/app has time to settle between steps
+        await new Promise(r => setTimeout(r, 250));
       }
 
       return res.json({
