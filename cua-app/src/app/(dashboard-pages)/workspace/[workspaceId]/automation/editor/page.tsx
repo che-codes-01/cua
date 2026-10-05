@@ -352,15 +352,29 @@ export default function WorkflowEditorPage() {
     const actionNodes = orderedNodes.filter(n => n.type !== "webhook_trigger");
     if (!actionNodes.length) return;
     setNodeOutputs({});
+    // Track the last result text so assert_result_contains can inspect it.
+    let previousResultText = "";
     for (const node of actionNodes) {
       setRunningId(node.id);
       const t0 = Date.now();
       try {
-        const res  = await fetch("/api/workflows/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runnerId: target, action: { type: node.type, ...node.params } }) });
+        // Inject previousResult for assert_result_contains so the runner can
+        // evaluate it against the output of the immediately preceding step.
+        const params = node.type === "assert_result_contains"
+          ? { ...node.params, previousResult: previousResultText }
+          : node.params;
+        const res  = await fetch("/api/workflows/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ runnerId: target, action: { type: node.type, ...params } }) });
         const data = await res.json();
         const ok   = res.ok && !data.error;
-        setNodeOutputs(prev => ({ ...prev, [node.id]: { success: ok, text: ok ? (data.result?.text ?? JSON.stringify(data.result)) : (data.error ?? "Failed"), durationMs: Date.now()-t0, resultType: data.result?.type ?? "text" } }));
-        if (!ok) break;
+        const resultText = ok ? (data.result?.text ?? JSON.stringify(data.result)) : (data.error ?? "Failed");
+        setNodeOutputs(prev => ({ ...prev, [node.id]: { success: ok, text: resultText, durationMs: Date.now()-t0, resultType: data.result?.type ?? "text" } }));
+        if (ok) {
+          // Carry forward the result text for the next assertion node.
+          previousResultText = resultText;
+        } else {
+          // Stop execution on failure (action error or failed assertion).
+          break;
+        }
       } catch(err) {
         setNodeOutputs(prev => ({ ...prev, [node.id]: { success: false, text: String(err), durationMs: Date.now()-t0, resultType: "error" } }));
         break;
@@ -778,6 +792,12 @@ function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onM
   onInputHandleMouseUp: (e: React.MouseEvent) => void;
 }) {
   const isAssert = tool.category === "assert";
+  // Use the tool's own color as the ring tint so each assertion variant is
+  // visually distinct (amber for visible, red for not-visible, violet for output).
+  const assertRingColor =
+    node.type === "assert_text_not_visible" ? "ring-red-500/30" :
+    node.type === "assert_result_contains"  ? "ring-violet-500/30" :
+    "ring-amber-500/30";
   const summary  = paramSummary(node, tool);
   return (
     <div
@@ -799,7 +819,7 @@ function NodeCard({ node, tool, selected, running, output, onSelect, onOpen, onM
       {/* Card */}
       <div className={`rounded-xl border bg-[#161616] cursor-move transition-all ${
         selected ? "border-blue-500/50 shadow-md shadow-blue-500/10" : "border-white/[0.08] hover:border-white/[0.15]"
-      } ${isAssert ? "ring-1 ring-amber-500/30" : ""}`}>
+      } ${isAssert ? `ring-1 ${assertRingColor}` : ""}`}>
         {/* Header */}
         <div className="flex items-center gap-2.5 px-3 py-2.5">
           <div className={`shrink-0 rounded-lg p-1.5 ${tool.color}`}>

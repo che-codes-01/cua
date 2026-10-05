@@ -24,7 +24,24 @@ export function executeRouter(hub: RunnerHub) {
     
     try {
       for (const action of actions) {
-        const result = await hub.sendAction(runnerId, action);
+        // For assert_result_contains, inject the serialised output of the
+        // immediately preceding step so the runner can evaluate the assertion.
+        let actionToSend = action;
+        if (
+          action &&
+          typeof action === 'object' &&
+          (action as { type: string }).type === 'assert_result_contains' &&
+          results.length > 0
+        ) {
+          const prev = results[results.length - 1];
+          const previousResult =
+            prev && typeof prev === 'object'
+              ? (prev as { text?: string }).text ??
+                JSON.stringify(prev)
+              : String(prev);
+          actionToSend = { ...action, previousResult };
+        }
+        const result = await hub.sendAction(runnerId, actionToSend);
         results.push(result);
       }
 
