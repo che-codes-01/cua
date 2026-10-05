@@ -59,8 +59,7 @@ export function executeRouter(hub: RunnerHub) {
         error: 'Execution failed',
         executionId,
         results,
-        failedAt:   failedIndex,           // 0-based index into actions[]
-        failedStep: failedIndex + 2,        // 1-based including the trigger node
+        failedStep: failedIndex + 2,        // 1-based node number including the trigger
         message: error instanceof Error ? error.message : 'Unknown error',
       });
     }

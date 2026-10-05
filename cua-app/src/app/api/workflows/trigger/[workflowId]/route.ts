@@ -178,7 +178,7 @@ export async function POST(
         const results: unknown[] = Array.isArray(data.results) ? data.results : [];
         // failedAt = 0-based index into actions[] (trigger excluded)
         const failedAt: number =
-          typeof data.failedAt === "number" ? data.failedAt : results.length;
+          typeof data.failedStep === "number" ? data.failedStep - 2 : results.length;
         // failedStep = 1-based node number including the trigger (what the user sees)
         const failedStep: number =
           typeof data.failedStep === "number" ? data.failedStep : failedAt + 2;
@@ -207,8 +207,7 @@ export async function POST(
           {
             error: message,
             executionId,
-            failedAt,               // 0-based index into actions[] — for programmatic use
-            failedStep,             // 1-based node number including trigger — human-readable
+            failedStep,
             failedNode: failedNodeLabel,
           },
           { status: 502 }
