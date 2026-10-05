@@ -176,8 +176,16 @@ export async function POST(
       if (!executeRes.ok) {
         // Partial results may be present up to the failing step
         const results: unknown[] = Array.isArray(data.results) ? data.results : [];
+        // failedAt = 0-based index into actions[] (trigger excluded)
         const failedAt: number =
           typeof data.failedAt === "number" ? data.failedAt : results.length;
+        // failedStep = 1-based node number including the trigger (what the user sees)
+        const failedStep: number =
+          typeof data.failedStep === "number" ? data.failedStep : failedAt + 2;
+        const failedNode = actionNodes[failedAt];
+        const failedNodeLabel = failedNode
+          ? (failedNode as { name?: string }).name || failedNode.type
+          : "unknown";
         const message: string =
           data.message || data.error || "Execution failed on runner";
         const logs = buildLogs(results, failedAt, message);
@@ -196,7 +204,13 @@ export async function POST(
           .eq("id", executionId);
 
         return NextResponse.json(
-          { error: message, executionId, failedAt },
+          {
+            error: message,
+            executionId,
+            failedAt,               // 0-based index into actions[] — for programmatic use
+            failedStep,             // 1-based node number including trigger — human-readable
+            failedNode: failedNodeLabel,
+          },
           { status: 502 }
         );
       }

@@ -51,11 +51,16 @@ export function executeRouter(hub: RunnerHub) {
         results,
       });
     } catch (error) {
+      // failedAt is the 0-based index into the actions array (trigger excluded).
+      // Expose it as both the raw index and a 1-based human step number so
+      // callers can display "Step 7 failed" rather than the confusing index 6.
+      const failedIndex = results.length; // index of the action that threw
       return res.status(500).json({
         error: 'Execution failed',
         executionId,
         results,
-        failedAt: results.length,
+        failedAt:   failedIndex,           // 0-based index into actions[]
+        failedStep: failedIndex + 2,        // 1-based including the trigger node
         message: error instanceof Error ? error.message : 'Unknown error',
       });
     }
