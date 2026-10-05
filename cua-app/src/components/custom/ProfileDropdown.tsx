@@ -9,9 +9,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuItem,
 } from "../ui/dropdown-menu";
-import { Button } from "../ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "../ui/avatar";
-import { User, Settings, HelpCircle, LogOut } from "lucide-react";
+import { User, Settings, HelpCircle } from "lucide-react";
 import Link from "next/link";
 
 function ProfileDropdown({
@@ -27,27 +26,25 @@ function ProfileDropdown({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={
-            <Button className="relative h-10 w-10 rounded-full" variant="ghost">
-              <Avatar>
-                <AvatarImage
-                  alt={userName ?? "@haydenbleasel"}
-                  src={avatarUrl ?? "https://github.com/haydenbleasel.png"}
-                />
-                <AvatarFallback>{userName?.[0] ?? "U"}</AvatarFallback>
-              </Avatar>
-            </Button>
-          }
-        />
+          className="relative h-10 w-10 rounded-full"
+        >
+          <Avatar>
+            <AvatarImage
+              alt={userName ?? "@user"}
+              src={avatarUrl ?? ""}
+            />
+            <AvatarFallback>{userName?.[0]?.toUpperCase() ?? "U"}</AvatarFallback>
+          </Avatar>
+        </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">
           <DropdownMenuGroup>
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col space-y-1">
                 <p className="font-medium text-sm leading-none">
-                  {userName ?? "Hayden Bleasel"}
+                  {userName ?? ""}
                 </p>
                 <p className="text-muted-foreground text-xs leading-none">
-                  {userEmail ?? "hello@haydenbleasel.com"}
+                  {userEmail ?? ""}
                 </p>
               </div>
             </DropdownMenuLabel>

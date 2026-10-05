@@ -20,8 +20,9 @@ import {
 import { HiOutlineSparkles } from "react-icons/hi2";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
 
 import Logo from "@/components/custom/Logo";
 
@@ -202,7 +203,7 @@ function BrowserDemo() {
 
             {/* Agent cursor */}
             <div className="absolute left-[67%] top-[63%]">
-              <div className="animate-pulse">
+              <div className="animate-bounce">
                 <FiMousePointer className="size-6 fill-white text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.35)]" />
               </div>
 
@@ -287,10 +288,16 @@ export default function Page() {
         </div>
 
         <div className="flex items-center gap-3">
-          <Button className="hidden rounded-md border border-white/10 bg-white/[0.08] text-white shadow-none hover:bg-white/[0.12] sm:flex">
+          <a
+            href="/signin"
+            className={cn(
+              buttonVariants(),
+              "hidden rounded-md border border-white/10 bg-white/[0.08] text-white shadow-none hover:bg-white/[0.12] sm:flex"
+            )}
+          >
             Start building
             <FiArrowRight className="ml-2 size-3.5" />
-          </Button>
+          </a>
         </div>
       </nav>
 
@@ -322,22 +329,27 @@ export default function Page() {
           </p>
 
           <div className="mt-10 flex flex-col justify-center gap-3 sm:flex-row">
-            <Button
-              size="lg"
-              className="h-12 rounded-lg bg-white px-6 text-black hover:bg-white/90"
+            <a
+              href="/signin"
+              className={cn(
+                buttonVariants({ size: "lg" }),
+                "h-12 rounded-lg bg-white px-6 text-black hover:bg-white/90"
+              )}
             >
               Start building
               <FiArrowRight className="ml-2 size-4" />
-            </Button>
+            </a>
 
-            <Button
-              size="lg"
-              variant="outline"
-              className="h-12 rounded-lg border-white/10 bg-white/[0.025] px-6 text-white/60 hover:bg-white/[0.06] hover:text-white"
+            <a
+              href="/docs"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "lg" }),
+                "h-12 rounded-lg border-white/10 bg-white/[0.025] px-6 text-white/60 hover:bg-white/[0.06] hover:text-white"
+              )}
             >
               <FiTerminal className="mr-2 size-4" />
               Read the docs
-            </Button>
+            </a>
           </div>
 
           <div className="mt-7 flex items-center justify-center gap-2 font-mono text-[10px] text-white/20">
@@ -477,9 +489,9 @@ export default function Page() {
                 </div>
 
                 <div className="space-y-2.5 py-6">
-                  {executionSteps.map(([step, text, time], index) => (
+                  {executionSteps.map(([step, text, time]) => (
                     <div
-                      key={index}
+                      key={`${step}-${text}`}
                       className="flex items-center gap-3 rounded-md border border-white/[0.05] bg-white/[0.015] px-3 py-3"
                     >
                       <span
@@ -580,10 +592,10 @@ export default function Page() {
                 while your workflow handles everything around it.
               </p>
 
-              <Button className="mt-8 rounded-md bg-white text-black hover:bg-white/90">
+                  <a href="/docs/n8n" className={cn(buttonVariants(), "mt-8 rounded-md bg-white text-black hover:bg-white/90")}>
                 Explore the n8n integration
                 <FiArrowRight className="ml-2 size-3.5" />
-              </Button>
+              </a>
             </div>
 
             <div className="flex items-center justify-center">
@@ -670,22 +682,27 @@ export default function Page() {
           </p>
 
           <div className="mt-10 flex justify-center gap-3">
-            <Button
-              size="lg"
-              className="h-12 rounded-lg bg-white px-7 text-black hover:bg-white/90"
+            <a
+              href="/signin"
+              className={cn(
+                buttonVariants({ size: "lg" }),
+                "h-12 rounded-lg bg-white px-7 text-black hover:bg-white/90"
+              )}
             >
               Start building
               <FiArrowRight className="ml-2 size-4" />
-            </Button>
+            </a>
 
-            <Button
-              size="lg"
-              variant="ghost"
-              className="h-12 rounded-lg text-white/35 hover:bg-white/[0.05] hover:text-white"
+            <a
+              href="#product"
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "lg" }),
+                "h-12 rounded-lg text-white/35 hover:bg-white/[0.05] hover:text-white"
+              )}
             >
               <FiPlay className="mr-2 size-4" />
               See it in action
-            </Button>
+            </a>
           </div>
         </div>
       </section>
@@ -697,24 +714,37 @@ export default function Page() {
           <Logo />
 
           <div className="flex items-center gap-6 text-xs text-white/20">
-            <a href="#" className="transition hover:text-white/50">
+            <a href="/docs" className="transition hover:text-white/50">
               Documentation
             </a>
 
-            <a href="#" className="transition hover:text-white/50">
+            <a
+              href="https://github.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition hover:text-white/50"
+            >
               GitHub
             </a>
 
-            <a href="#" className="transition hover:text-white/50">
+            <a href="/status" className="transition hover:text-white/50">
               Status
             </a>
 
-            <a href="#" className="transition hover:text-white/50">
+            <a href="/privacy" className="transition hover:text-white/50">
               Privacy
             </a>
           </div>
 
-          <FiGithub className="hidden size-4 text-white/20 sm:block" />
+          <a
+            href="https://github.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub"
+            className="hidden sm:block"
+          >
+            <FiGithub className="size-4 text-white/20 transition hover:text-white/50" />
+          </a>
         </div>
       </footer>
     </main>

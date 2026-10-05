@@ -1,12 +1,12 @@
-import Link from "next/dist/client/link";
+import Link from "next/link";
 import React from "react";
 import { GiCamelHead } from "react-icons/gi";
 
-function Logo({ subtitle }: { subtitle?: string }) {
+function Logo({ subtitle, href = "/" }: { subtitle?: string; href?: string }) {
   return (
-    <Link href="/dashboard" className="p-2">
-      <div className="flex gap-2 items-center font-bold text-xl">
-        <GiCamelHead className="h-8 w-8 " />
+    <Link href={href} className="p-2">
+      <div className="flex gap-2 items-center font-bold text-xl text-white">
+        <GiCamelHead className="h-8 w-8" />
         <p>Cuboidal</p>
       </div>
       <div className="font-light text-muted-foreground">

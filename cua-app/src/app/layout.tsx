@@ -7,8 +7,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "cua-app",
-  description: "cua-app — Next.js app with Supabase GitHub auth",
+  title: "Cuboidal — Computer Use Infrastructure",
+  description: "A purpose-built computer-use runtime for AI agents.",
 };
 
 export default function RootLayout({

@@ -1,7 +1,7 @@
 "use client";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/utils/supabase/client";
-import { redirect } from "next/dist/client/components/navigation";
+import { useRouter } from "next/navigation";
 
 function SignOutButton({
   buttonText = "Sign Out",
@@ -12,6 +12,8 @@ function SignOutButton({
   className?: string;
   variant?: "destructive" | "ghost" | "secondary";
 }) {
+  const router = useRouter();
+
   async function handleSignOut() {
     const supabase = createClient();
     try {
@@ -19,12 +21,12 @@ function SignOutButton({
     } catch (err) {
       console.error("Error signing out:", err);
     }
-    redirect("/signin");
+    router.push("/signin");
   }
 
   return (
     <Button onClick={handleSignOut} className={className} variant={variant}>
-      {buttonText} &rarr;
+      {buttonText} →
     </Button>
   );
 }
