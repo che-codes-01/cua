@@ -619,7 +619,18 @@ def _backend_cliclick(t: str, action: dict) -> dict:
 
     if t == "type":
         text = action.get("text", "")
-        _pyautogui_type(text)   # pbcopy + cmd+v via pyautogui (no Automation needed)
+        # Use cliclick t: for typing — this sends real per-character key events
+        # which search fields (Spotlight, browser address bar, etc.) respond to.
+        # Clipboard paste (pbcopy + cmd+v) is fast but Spotlight and many search
+        # fields ignore pasted text and never trigger their search handler.
+        # Fall back to clipboard paste only for text cliclick can't handle
+        # (non-ASCII / characters outside the basic Latin set).
+        try:
+            text.encode("ascii")
+            _cliclick(f"t:{text}")
+        except (UnicodeEncodeError, RuntimeError):
+            # Non-ASCII or cliclick unavailable — fall back to clipboard paste
+            _pyautogui_type(text)
         delay = float(action.get("delay", 0))
         if delay > 0:
             time.sleep(delay)
