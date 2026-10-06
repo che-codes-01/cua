@@ -502,6 +502,11 @@ def _quartz_key(combo: str) -> None:
     Send a key or key combo via Quartz CGEventPost (macOS only).
     Accepts both  "cmd+l"  and  "kp:cmd-l"  notation.
     Requires Accessibility permission (same as cliclick / pyautogui).
+
+    Uses kCGHIDEventTap (hardware level) so the event travels the full
+    WindowServer pipeline — identical to a physical keypress.  This is the
+    same tap level that pynput uses and is required for system UI such as
+    Spotlight to receive Return/Enter correctly.
     """
     import Quartz  # noqa: PLC0415
     flags, keycode = _parse_combo(combo)
@@ -510,9 +515,9 @@ def _quartz_key(combo: str) -> None:
     if flags:
         Quartz.CGEventSetFlags(down, flags)
         Quartz.CGEventSetFlags(up,   flags)
-    Quartz.CGEventPost(Quartz.kCGSessionEventTap, down)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
     time.sleep(0.02)   # tiny gap so the target app registers the press
-    Quartz.CGEventPost(Quartz.kCGSessionEventTap, up)
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
 
 
 # ── pyautogui keyboard helper (cliclick backend uses this for key/type) ──────
@@ -553,30 +558,69 @@ def _pyautogui_key(combo: str) -> None:
         pyautogui.hotkey(*keys)
 
 
+# Shift-modified characters → their unshifted base key on a US layout.
+# Needed so we can look up the correct hardware keycode and set the shift flag.
+_SHIFT_CHARS: dict[str, str] = {
+    'A':'a','B':'b','C':'c','D':'d','E':'e','F':'f','G':'g','H':'h','I':'i',
+    'J':'j','K':'k','L':'l','M':'m','N':'n','O':'o','P':'p','Q':'q','R':'r',
+    'S':'s','T':'t','U':'u','V':'v','W':'w','X':'x','Y':'y','Z':'z',
+    '!':'1','@':'2','#':'3','$':'4','%':'5','^':'6','&':'7','*':'8','(':'9',
+    ')':'0','_':'-','+':'=','{':'[','}':']','|':'\\',':':';','"':"'",
+    '<':',','>':'.','?':'/','~':'`',
+}
+
+
 def _pyautogui_type(text: str) -> None:
     """
-    Type text on macOS by posting Unicode key events via Quartz.
+    Type text on macOS using Quartz CGEventPost at kCGHIDEventTap.
 
-    CGEventKeyboardSetUnicodeString sends real key-down/key-up events that
-    every app (including Spotlight, Terminal, browser address bars, etc.)
-    receives just like physical keystrokes.  The clipboard paste approach
-    (pbcopy + cmd+v) is explicitly skipped here because many system inputs
-    — most notably Spotlight — ignore cmd+v and would end up with the wrong
-    text (or nothing at all) in the field.
+    For every character we look up its real hardware keycode in _MAC_KEYCODES
+    (adding the Shift flag for uppercase / shifted symbols).  This makes every
+    synthetic keystroke indistinguishable from a physical one, which is required
+    for system inputs like Spotlight that watch the raw HID event stream to
+    trigger their live search.
+
+    Characters outside the US-ASCII keycode map fall back to keycode=0 with a
+    Unicode string attached (works for most standard text fields).
+
+    After posting all characters we sleep 600 ms so that async search UIs
+    (Spotlight, browser address bars, etc.) have time to settle on the correct
+    result before the caller's next action (typically Enter) fires.
     """
     try:
         import Quartz  # noqa: PLC0415
         src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
+        shift_flag = _MAC_MODIFIER_FLAGS['shift']
+
         for ch in text:
-            uchar = ch
-            down = Quartz.CGEventCreateKeyboardEvent(src, 0, True)
-            up   = Quartz.CGEventCreateKeyboardEvent(src, 0, False)
-            Quartz.CGEventKeyboardSetUnicodeString(down, len(uchar), uchar)
-            Quartz.CGEventKeyboardSetUnicodeString(up,   len(uchar), uchar)
-            Quartz.CGEventPost(Quartz.kCGSessionEventTap, down)
+            # Determine keycode + whether Shift must be held
+            base    = _SHIFT_CHARS.get(ch, ch)
+            keycode = _MAC_KEYCODES.get(base)
+            needs_shift = ch in _SHIFT_CHARS
+
+            if keycode is not None:
+                # Real hardware keycode path — triggers live search in Spotlight etc.
+                flags = shift_flag if needs_shift else 0
+                down  = Quartz.CGEventCreateKeyboardEvent(src, keycode, True)
+                up    = Quartz.CGEventCreateKeyboardEvent(src, keycode, False)
+                Quartz.CGEventSetFlags(down, flags)
+                Quartz.CGEventSetFlags(up,   flags)
+            else:
+                # Fallback for chars not in our keycode map (emoji, accented chars …)
+                down = Quartz.CGEventCreateKeyboardEvent(src, 0, True)
+                up   = Quartz.CGEventCreateKeyboardEvent(src, 0, False)
+                Quartz.CGEventKeyboardSetUnicodeString(down, len(ch), ch)
+                Quartz.CGEventKeyboardSetUnicodeString(up,   len(ch), ch)
+
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, down)
             time.sleep(0.02)
-            Quartz.CGEventPost(Quartz.kCGSessionEventTap, up)
+            Quartz.CGEventPost(Quartz.kCGHIDEventTap, up)
             time.sleep(0.02)
+
+        # Give async search UIs (Spotlight, omnibox …) time to settle before
+        # the next action (usually Enter) is dispatched.
+        time.sleep(0.6)
+
     except Exception:
         # Fallback: clipboard paste (works for most regular apps)
         subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
