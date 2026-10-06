@@ -35,7 +35,6 @@ lock            = threading.Lock()
 # Key accumulation — consecutive printable chars → single `type` node
 pending_text    = ""
 pending_text_ts = 0.0
-TEXT_FLUSH_GAP  = 0.8   # seconds gap before flushing pending text as a node
 
 # Modifier tracking for hotkey detection
 pressed_mods: set[str] = set()
@@ -82,12 +81,6 @@ drag_start_pos  = None
 drag_start_time = 0.0
 DRAG_THRESHOLD  = 5      # pixels
 
-# Auto-wait insertion — if the user pauses > this many seconds between
-# actions, insert a wait node so the workflow replays the same pacing.
-# Caps at MAX_AUTO_WAIT so a long coffee break doesn't produce a 5-min wait.
-AUTO_WAIT_THRESHOLD = 0.5   # seconds — gaps shorter than this are ignored
-MAX_AUTO_WAIT       = 5.0   # seconds — longest wait node we'll ever insert
-last_event_ts: float = 0.0  # timestamp of the last emitted event
 
 # ── Output helper ──────────────────────────────────────────────────────────────
 
@@ -96,28 +89,15 @@ def emit(obj: dict) -> None:
     sys.stdout.flush()
 
 def emit_event(action: dict) -> None:
-    global last_event_ts
-    now = time.time()
-    if last_event_ts > 0:
-        gap = now - last_event_ts
-        if gap >= AUTO_WAIT_THRESHOLD:
-            wait_secs = round(min(gap, MAX_AUTO_WAIT), 2)
-            emit({"event": {"type": "wait", "duration": wait_secs}})
-    last_event_ts = now
     emit({"event": action})
 
 # ── Text flusher ───────────────────────────────────────────────────────────────
 
 def flush_pending_text() -> None:
-    global pending_text, pending_text_ts, last_event_ts
+    global pending_text, pending_text_ts
     with lock:
         if pending_text:
-            ts = pending_text_ts   # when the last char was typed
             emit_event({"type": "type", "text": pending_text})
-            # Backdate last_event_ts to when the last char was typed,
-            # not now — so the gap to the *next* action (e.g. Enter)
-            # reflects how long the user actually paused after typing.
-            last_event_ts = ts
             pending_text    = ""
             pending_text_ts = 0.0
 
@@ -257,12 +237,11 @@ def on_key_release(key) -> None:
 # ── Listener lifecycle ─────────────────────────────────────────────────────────
 
 def start_recording() -> None:
-    global recording, mouse_listener, kbd_listener, pressed_mods, last_event_ts
+    global recording, mouse_listener, kbd_listener, pressed_mods
     if recording:
         return
     with lock:
         pressed_mods  = set()
-    last_event_ts = 0.0
     recording       = True
     mouse_listener  = mouse.Listener(on_click=on_click, on_scroll=on_scroll)
     kbd_listener    = keyboard.Listener(on_press=on_key_press, on_release=on_key_release)

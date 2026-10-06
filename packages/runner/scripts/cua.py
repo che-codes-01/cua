@@ -554,10 +554,34 @@ def _pyautogui_key(combo: str) -> None:
 
 
 def _pyautogui_type(text: str) -> None:
-    """Paste text via clipboard + Quartz Cmd+V (macOS only)."""
-    subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
-    time.sleep(0.05)
-    _quartz_key("cmd+v")
+    """
+    Type text on macOS by posting Unicode key events via Quartz.
+
+    CGEventKeyboardSetUnicodeString sends real key-down/key-up events that
+    every app (including Spotlight, Terminal, browser address bars, etc.)
+    receives just like physical keystrokes.  The clipboard paste approach
+    (pbcopy + cmd+v) is explicitly skipped here because many system inputs
+    — most notably Spotlight — ignore cmd+v and would end up with the wrong
+    text (or nothing at all) in the field.
+    """
+    try:
+        import Quartz  # noqa: PLC0415
+        src = Quartz.CGEventSourceCreate(Quartz.kCGEventSourceStateHIDSystemState)
+        for ch in text:
+            uchar = ch
+            down = Quartz.CGEventCreateKeyboardEvent(src, 0, True)
+            up   = Quartz.CGEventCreateKeyboardEvent(src, 0, False)
+            Quartz.CGEventKeyboardSetUnicodeString(down, len(uchar), uchar)
+            Quartz.CGEventKeyboardSetUnicodeString(up,   len(uchar), uchar)
+            Quartz.CGEventPost(Quartz.kCGSessionEventTap, down)
+            time.sleep(0.02)
+            Quartz.CGEventPost(Quartz.kCGSessionEventTap, up)
+            time.sleep(0.02)
+    except Exception:
+        # Fallback: clipboard paste (works for most regular apps)
+        subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
+        time.sleep(0.05)
+        _quartz_key("cmd+v")
 
 
 def _backend_cliclick(t: str, action: dict) -> dict:
@@ -595,7 +619,7 @@ def _backend_cliclick(t: str, action: dict) -> dict:
 
     if t == "type":
         text = action.get("text", "")
-        _pyautogui_type(text)   # pbcopy + cmd+v via pyautogui (no Automation needed)
+        _pyautogui_type(text)   # Unicode key events via Quartz (works in Spotlight etc.)
         return {"type": "text", "text": f"Typed: {text!r}"}
 
     if t == "key":
@@ -877,9 +901,7 @@ def _backend_pyautogui(t: str, action: dict) -> dict:
     if t == "type":
         text = action.get("text", "")
         if _SYSTEM == "Darwin":
-            subprocess.run(["pbcopy"], input=text.encode("utf-8"), check=True)
-            time.sleep(0.05)
-            _quartz_key("cmd+v")  # reliable Cmd+V via Quartz
+            _pyautogui_type(text)   # Unicode key events via Quartz (works in Spotlight etc.)
         else:
             pyautogui.write(text, interval=0.02)
         return {"type": "text", "text": f"Typed: {text!r}"}
